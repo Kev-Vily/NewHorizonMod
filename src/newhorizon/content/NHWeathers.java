@@ -43,7 +43,7 @@ public class NHWeathers {
             }
 
             @Override
-            public void drawOver(WeatherState state) {
+            public void drawUnder(WeatherState state) {
                 Draw.blend(Blending.additive);
                 drawQuantumHexParticles(state.intensity(), state.opacity());
                 Draw.blend();
@@ -115,7 +115,7 @@ public class NHWeathers {
             float x = rand.random(0f, boundMax) + Time.time * windX;
             float y = rand.random(0f, boundMax) + Time.time * windY;
 
-            float alphaBase = rand.random(0.15f, 0.35f);
+            float alphaBase = rand.random(0.08f, 0.14f);
             float pulsePeriod = rand.random(1.6f, 3.4f);
             float pulseAngle = rand.random(360f);
 

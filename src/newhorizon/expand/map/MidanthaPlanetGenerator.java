@@ -7,11 +7,16 @@ import arc.math.Interp;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.math.geom.Vec3;
+import arc.math.geom.Geometry;
+import arc.math.geom.Point2;
 import arc.struct.IntSet;
+import arc.struct.ObjectMap;
+import arc.struct.Seq;
 import arc.util.Structs;
 import arc.util.Tmp;
 import arc.util.noise.Ridged;
 import arc.util.noise.Simplex;
+import arc.util.noise.VoronoiNoise;
 import mindustry.content.Blocks;
 import mindustry.game.Schematics;
 import mindustry.graphics.g3d.PlanetGrid;
@@ -22,6 +27,8 @@ import mindustry.world.*;
 import mindustry.world.blocks.environment.Floor;
 import newhorizon.content.NHBlocks;
 import newhorizon.content.blocks.EnvironmentBlock;
+
+import static mindustry.Vars.content;
 
 public class MidanthaPlanetGenerator extends PlanetGenerator {
     public static Interp interp = new Interp.Exp(2, 3);
@@ -41,6 +48,71 @@ public class MidanthaPlanetGenerator extends PlanetGenerator {
     public float seaLevel = 0.42f;
     public float iceSheetLevel = 0.50f;
     public float snowLevel = 0.535f;
+
+    public float depositSize = 36f;
+    public float maxSolidRatio = 0.35f;
+    public float maxMetalRatio = 0.15f;
+    public float maxLiquidRatio = 0.40f;
+    public int minOreTiles = 2;
+    public float oreDistortScl = 3f;
+    public float oreDistortMag = 5f;
+    public float blendRadius = 3f;
+    public int voronoiEdgeMargin = 3;
+    public float ridgedCutScl = 0.040f;
+    public float ridgedCutThresh = 0.32f;
+    public float ridgedDistortScl = 1f;
+    public float ridgedDistortMag = 3f;
+    public boolean debugGenerate = false;
+
+    private static class OreVeinProfile {
+        float centerFalloff, minCenter, bandThresh1, bandThresh2, bandScl1, bandScl2;
+        int cellWeight;
+
+        OreVeinProfile(int cellWeight, float centerFalloff, float minCenter, float bandThresh1, float bandThresh2, float bandScl1, float bandScl2) {
+            this.cellWeight = cellWeight;
+            this.centerFalloff = centerFalloff;
+            this.minCenter = minCenter;
+            this.bandThresh1 = bandThresh1;
+            this.bandThresh2 = bandThresh2;
+            this.bandScl1 = bandScl1;
+            this.bandScl2 = bandScl2;
+        }
+    }
+
+    private static final ObjectMap<Block, OreVeinProfile> oreProfiles = ObjectMap.of(
+            Blocks.oreTitanium, new OreVeinProfile(2, 0.16f, 0.30f, 0.17f, 0.28f, 16f, 12f),
+            Blocks.oreTungsten, new OreVeinProfile(2, 0.16f, 0.28f, 0.15f, 0.26f, 32f, 26f),
+            Blocks.oreThorium, new OreVeinProfile(2, 0.46f, 0.04f, 0.16f, 0.28f, 48f, 40f),
+            EnvironmentBlock.oreSilicar, new OreVeinProfile(3, 0.22f, 0.20f, 0.14f, 0.25f, 38f, 30f),
+            EnvironmentBlock.oreZeta, new OreVeinProfile(2, 0.46f, 0.04f, 0.18f, 0.30f, 16f, 12f)
+    );
+
+    private static final Seq<Block> oreTypes = Seq.with(
+            Blocks.oreTitanium,
+            Blocks.oreTungsten,
+            Blocks.oreThorium,
+            EnvironmentBlock.oreSilicar,
+            EnvironmentBlock.oreZeta
+    );
+
+    private static int oreCellWeightTotal;
+    private static final Seq<Block> weightedOreTypes = new Seq<>();
+
+    static {
+        oreTypes.each(ore -> {
+            OreVeinProfile p = oreProfiles.get(ore);
+            for (int n = 0; n < p.cellWeight; n++) weightedOreTypes.add(ore);
+            oreCellWeightTotal += p.cellWeight;
+        });
+    }
+
+    private static final ObjectMap<Block, Block> oreFloorMap = ObjectMap.of(
+            Blocks.oreTitanium, EnvironmentBlock.conglomerate,
+            Blocks.oreTungsten, EnvironmentBlock.darkConglomerate,
+            Blocks.oreThorium, EnvironmentBlock.thoriumStone,
+            EnvironmentBlock.oreSilicar, EnvironmentBlock.siliceoustone,
+            EnvironmentBlock.oreZeta, EnvironmentBlock.zetaCrystalFloor
+    );
     Block
             qd = NHBlocks.quantumFieldDeep, qn = NHBlocks.quantumField,
             cb = EnvironmentBlock.conglomerateSparse, dc = EnvironmentBlock.darkConglomerateSparse,
@@ -314,10 +386,299 @@ public class MidanthaPlanetGenerator extends PlanetGenerator {
 
         distort(5, 2);
 
+        generateVoronoiOres();
+        distortOreVeins(oreDistortScl, oreDistortMag);
+        cutRidgedOrePeaks();
+        removeOreNearVoronoiBorders();
+        postProcessOreFloors();
+        removeOreOnLiquids();
+
+        if (debugGenerate) debugVoronoiBorders();
+
         Vec2 trns = Tmp.v1.trns(rand.random(360f), width / 2.6f);
         int coreX = (int) (-trns.x + width / 2f), coreY = (int) (-trns.y + height / 2f);
         Schematics.placeLaunchLoadout(coreX, coreY);
 
+    }
+
+    private static class CellStats {
+        int total, solid, metal, liquid, oreSurface;
+        boolean valid;
+        Block oreType;
+    }
+
+    private boolean isLiquidFloor(Block floor) {
+        return floor.asFloor().isLiquid || isExcludedFloor(floor);
+    }
+
+    private boolean isOreSurface(int x, int y) {
+        Tile tile = tiles.get(x, y);
+        return tile != null && tile.block() == Blocks.air && tile.floor().asFloor().hasSurface() && !isLiquidFloor(tile.floor());
+    }
+
+    private boolean isExcludedFloor(Block floor) {
+        return floor == NHBlocks.quantumField || floor == NHBlocks.quantumFieldDeep || floor == NHBlocks.quantumFieldDisturbing;
+    }
+
+    private boolean isMetalFloor(Block floor) {
+        return floor.name.contains("metal") || floor == Blocks.metalTiles9 || floor == Blocks.metalTiles11;
+    }
+
+    private boolean isOreOverlay(Block block) {
+        return oreFloorMap.containsKey(block);
+    }
+
+    private Block assignOreType(long cellId) {
+        int idx = Math.floorMod(Long.hashCode(cellId), oreCellWeightTotal);
+        return weightedOreTypes.get(idx);
+    }
+
+    private long voronoiCellId(VoronoiNoise vn, int x, int y, double freq) {
+        vn.setUseDistance(false);
+        return Double.doubleToLongBits(vn.noise(x, y, freq));
+    }
+
+    private boolean isVoronoiBorder(VoronoiNoise vn, int x, int y, double freq) {
+        long id = voronoiCellId(vn, x, y, freq);
+        for (Point2 p : Geometry.d4) {
+            int nx = x + p.x, ny = y + p.y;
+            if (!Structs.inBounds(nx, ny, width, height)) return true;
+            if (voronoiCellId(vn, nx, ny, freq) != id) return true;
+        }
+        return false;
+    }
+
+    private boolean isNearVoronoiBorder(VoronoiNoise vn, int x, int y, double freq, int margin) {
+        long id = voronoiCellId(vn, x, y, freq);
+        for (int dx = -margin; dx <= margin; dx++) {
+            for (int dy = -margin; dy <= margin; dy++) {
+                if (dx == 0 && dy == 0) continue;
+                int nx = x + dx, ny = y + dy;
+                if (!Structs.inBounds(nx, ny, width, height)) return true;
+                if (voronoiCellId(vn, nx, ny, freq) != id) return true;
+            }
+        }
+        return false;
+    }
+
+    private void placeOreVein(Tile tile, Block oreType) {
+        tile.setOverlay(oreType);
+        if (oreType != EnvironmentBlock.oreZeta) {
+            tile.setFloor(oreFloorMap.get(oreType).asFloor());
+        }
+    }
+
+    private void removeOreNearVoronoiBorders() {
+        VoronoiNoise vn = new VoronoiNoise(seed + sector.id, true);
+        double freq = 1.0 / depositSize;
+
+        tiles.each((x, y) -> {
+            Tile tile = tiles.get(x, y);
+            if (!isOreOverlay(tile.overlay())) return;
+            if (isNearVoronoiBorder(vn, x, y, freq, voronoiEdgeMargin)) {
+                tile.setOverlay(Blocks.air);
+            }
+        });
+    }
+
+    private void debugVoronoiBorders() {
+        VoronoiNoise vn = new VoronoiNoise(seed + sector.id, true);
+        double freq = 1.0 / depositSize;
+
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                if (!isVoronoiBorder(vn, x, y, freq)) continue;
+                Tile tile = tiles.getn(x, y);
+                tile.setFloor(Blocks.snow.asFloor());
+                tile.setBlock(Blocks.air);
+                tile.setOverlay(Blocks.air);
+            }
+        }
+    }
+
+    private void sampleRidgedCoords(int x, int y, Block oreType, Vec2 out) {
+        float ox, oy, off;
+        if (oreType == Blocks.oreTungsten) {
+            ox = x + 31f;
+            oy = y + 67f;
+            off = 411f;
+        } else if (oreType == EnvironmentBlock.oreSilicar) {
+            ox = x - 24f;
+            oy = y + 53f;
+            off = 527f;
+        } else if (oreType == Blocks.oreThorium) {
+            ox = x + 44f;
+            oy = y - 38f;
+            off = 643f;
+        } else {
+            out.set(x, y);
+            return;
+        }
+        float bx = ox + noise(ox - off, oy - 287f, ridgedDistortScl, ridgedDistortMag) - ridgedDistortMag / 2f;
+        float by = oy + noise(ox + 311f, oy + 187f, ridgedDistortScl, ridgedDistortMag) - ridgedDistortMag / 2f;
+        if (oreType == Blocks.oreTungsten) {
+            out.set(bx + by * 0.82f, by - bx * 0.58f);
+        } else if (oreType == EnvironmentBlock.oreSilicar) {
+            out.set(bx - by * 0.76f, by + bx * 0.64f);
+        } else {
+            out.set(bx - by * 0.71f, by - bx * 0.69f);
+        }
+    }
+
+    private boolean isRidgedVeinCut(int x, int y, Block oreType) {
+        if (oreType != Blocks.oreTungsten && oreType != EnvironmentBlock.oreSilicar && oreType != Blocks.oreThorium) return false;
+        int ridgedSeed = oreType == Blocks.oreTungsten ? seed + sector.id + 811
+                : oreType == EnvironmentBlock.oreSilicar ? seed + sector.id + 927
+                : seed + sector.id + 1033;
+        sampleRidgedCoords(x, y, oreType, Tmp.v1);
+        float ridged = Math.max(Ridged.noise2d(ridgedSeed, Tmp.v1.x, Tmp.v1.y, 4, ridgedCutScl), 0f);
+        return ridged > ridgedCutThresh;
+    }
+
+    private void cutRidgedOrePeaks() {
+        tiles.each((x, y) -> {
+            Tile tile = tiles.get(x, y);
+            Block ore = tile.overlay();
+            if (!isOreOverlay(ore)) return;
+            if (isRidgedVeinCut(x, y, ore)) tile.setOverlay(Blocks.air);
+        });
+    }
+
+    private void sampleOreBands(int x, int y, int i, Block oreType, OreVeinProfile profile, Vec2 out) {
+        int ox = x - 4, oy = y + 23;
+        if (oreType == Blocks.oreTitanium) {
+            float bx1 = ox + oy * 1.18f;
+            float by1 = oy + ox * 0.92f;
+            float bx2 = ox - oy * 0.68f + 47f;
+            float by2 = oy - ox * 0.74f + 19f;
+            out.x = Math.abs(0.5f - noise(bx1, by1 + i * 999, 2, 0.7, profile.bandScl1 + i * 2));
+            out.y = Math.abs(0.5f - noise(bx2, by2 - i * 999, 1, 1.0, profile.bandScl2 + i * 4));
+        } else if (oreType == EnvironmentBlock.oreZeta) {
+            float bx1 = ox - oy * 1.18f;
+            float by1 = oy - ox * 0.92f;
+            float bx2 = ox + oy * 0.68f + 47f;
+            float by2 = oy + ox * 0.74f + 19f;
+            out.x = Math.abs(0.5f - noise(bx1, by1 + i * 999, 2, 0.7, profile.bandScl1 + i * 2));
+            out.y = Math.abs(0.5f - noise(bx2, by2 - i * 999, 1, 1.0, profile.bandScl2 + i * 4));
+        } else {
+            out.x = Math.abs(0.5f - noise(ox, oy + i * 999, 2, 0.7, profile.bandScl1 + i * 2));
+            out.y = Math.abs(0.5f - noise(ox, oy - i * 999, 1, 1.0, profile.bandScl2 + i * 4));
+        }
+    }
+
+    private void generateVoronoiOres() {
+        VoronoiNoise vn = new VoronoiNoise(seed + sector.id, true);
+        double freq = 1.0 / depositSize;
+        ObjectMap<Long, CellStats> cells = new ObjectMap<>();
+
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                long cellId = voronoiCellId(vn, x, y, freq);
+
+                CellStats stats = cells.get(cellId);
+                if (stats == null) {
+                    stats = new CellStats();
+                    cells.put(cellId, stats);
+                }
+
+                stats.total++;
+
+                Tile tile = tiles.get(x, y);
+                Block f = tile.floor();
+                if (tile.solid()) stats.solid++;
+                if (isMetalFloor(f)) stats.metal++;
+                if (isLiquidFloor(f)) stats.liquid++;
+                if (isOreSurface(x, y)) stats.oreSurface++;
+            }
+        }
+
+        cells.each((cellId, stats) -> {
+            stats.valid = stats.solid / (float) stats.total < maxSolidRatio
+                    && stats.metal / (float) stats.total < maxMetalRatio
+                    && stats.liquid / (float) stats.total < maxLiquidRatio
+                    && stats.oreSurface >= minOreTiles;
+            if (stats.valid) {
+                stats.oreType = assignOreType(cellId);
+            }
+        });
+
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                if (!isOreSurface(x, y)) continue;
+
+                Tile tile = tiles.get(x, y);
+                if (isLiquidFloor(tile.floor())) continue;
+
+                long cellId = voronoiCellId(vn, x, y, freq);
+                CellStats stats = cells.get(cellId);
+                if (stats == null || !stats.valid) continue;
+
+                OreVeinProfile profile = oreProfiles.get(stats.oreType);
+                if (profile == null) continue;
+
+                vn.setUseDistance(true);
+                float dist = (float) vn.noise(x, y, freq);
+                float centerVal = 1f - Mathf.clamp(dist / profile.centerFalloff, 0f, 1f);
+
+                int i = oreTypes.indexOf(stats.oreType);
+                if (i < 0) continue;
+                sampleOreBands(x, y, i, stats.oreType, profile, Tmp.v1);
+                float band1 = Tmp.v1.x, band2 = Tmp.v1.y;
+                if (band1 <= profile.bandThresh1 || band2 <= profile.bandThresh2) continue;
+                if (isRidgedVeinCut(x, y, stats.oreType)) continue;
+
+                boolean atCenter = centerVal >= profile.minCenter;
+                boolean nearEdge = isNearVoronoiBorder(vn, x, y, freq, voronoiEdgeMargin);
+
+                if (atCenter) {
+                    placeOreVein(tile, stats.oreType);
+                } else if (!nearEdge) {
+                    placeOreVein(tile, stats.oreType);
+                }
+            }
+        }
+    }
+
+    private void distortOreVeins(float scl, float mag) {
+        short[] overlays = new short[tiles.width * tiles.height];
+        short[] floors = new short[overlays.length];
+
+        tiles.each((x, y) -> {
+            int idx = y * tiles.width + x;
+            float cx = x + noise(x - 155f, y - 200f, scl, mag) - mag / 2f;
+            float cy = y + noise(x + 155f, y + 155f, scl, mag) - mag / 2f;
+            Tile src = tiles.getn(Mathf.clamp((int) cx, 0, width - 1), Mathf.clamp((int) cy, 0, height - 1));
+            overlays[idx] = src.overlay().id;
+            Block srcOre = src.overlay();
+            floors[idx] = isOreOverlay(srcOre) && srcOre != EnvironmentBlock.oreZeta ? src.floor().id : tiles.getn(x, y).floor().id;
+        });
+
+        for (int i = 0; i < overlays.length; i++) {
+            Tile tile = tiles.geti(i);
+            Block ov = content.block(overlays[i]);
+            if (isOreOverlay(ov) && !isLiquidFloor(tile.floor())) {
+                tile.setOverlay(ov);
+                if (ov != EnvironmentBlock.oreZeta) {
+                    tile.setFloor(content.block(floors[i]).asFloor());
+                }
+            }
+        }
+    }
+
+    private void postProcessOreFloors() {
+        blend(EnvironmentBlock.conglomerate, EnvironmentBlock.conglomerateSparse, blendRadius);
+        blend(EnvironmentBlock.darkConglomerate, EnvironmentBlock.darkConglomerateSparse, blendRadius);
+        blend(EnvironmentBlock.thoriumStone, EnvironmentBlock.thoriumStoneSparse, blendRadius);
+        blend(EnvironmentBlock.siliceoustone, EnvironmentBlock.conglomerateSparse, blendRadius);
+        blend(EnvironmentBlock.zetaCrystalFloor, EnvironmentBlock.darkConglomerateSparse, blendRadius);
+    }
+
+    private void removeOreOnLiquids() {
+        tiles.eachTile(tile -> {
+            if (isLiquidFloor(tile.floor())) {
+                tile.setOverlay(Blocks.air);
+            }
+        });
     }
 
     private void drawLine(int rad, Block block) {

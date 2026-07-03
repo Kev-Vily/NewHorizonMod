@@ -553,10 +553,10 @@ new-horizon-thermo-core-positive-factory 1 1 1 0
 new-horizon-thermo-reactor 1 1 5 0
 new-horizon-thermo-turret 1 1 1 0
 new-horizon-thermobaric-chamber 1 1 2 0
-new-horizon-thorium-stone 0 0 1 7032694
-new-horizon-thorium-stone-dense 0 0 1 7361404
-new-horizon-thorium-stone-sparse 0 0 1 6704241
-new-horizon-thorium-stone-wall 0 1 1 4075076
+new-horizon-thorium-stone 0 0 1 4866659
+new-horizon-thorium-stone-dense 0 0 1 5129576
+new-horizon-thorium-stone-sparse 0 0 1 4669279
+new-horizon-thorium-stone-wall 0 1 1 3682888
 new-horizon-thorium-transmuter 1 1 4 0
 new-horizon-titanium-reconstructor 1 1 2 0
 new-horizon-titanium-wall 1 1 1 0
