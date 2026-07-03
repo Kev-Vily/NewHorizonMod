@@ -20,6 +20,7 @@ import mindustry.ui.Links;
 import mindustry.ui.Styles;
 import mindustry.ui.WarningBar;
 import mindustry.ui.dialogs.BaseDialog;
+import mindustry.ui.dialogs.PlanetDialog;
 import newhorizon.content.*;
 import newhorizon.content.register.RecipeRegister;
 import newhorizon.content.register.UnitRecipeRegister;
@@ -59,6 +60,10 @@ public class NewHorizon extends Mod {
             showStartLog();
             Time.run(60f, () -> {
                 if (OS.username.equals("LaoHuaJi")) {
+
+                    PlanetDialog.debugSelect = true;
+                    PlanetDialog.debugShowNumbers = true;
+
                     DebugFunc.updateBlockList();
                     DebugFunc.generateBlankBundle();
                     DebugFunc.writeVanillaBlockList();
@@ -76,7 +81,8 @@ public class NewHorizon extends Mod {
                     //showNew();
                 }
 
-                DebugFunc.unlockModContent();
+
+                //DebugFunc.unlockModContent();
                 //DebugFunc.outputIcon();
                 //DebugFunc.outlineIcon();
 
