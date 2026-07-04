@@ -25,6 +25,7 @@ import newhorizon.content.*;
 import newhorizon.content.register.RecipeRegister;
 import newhorizon.content.register.UnitRecipeRegister;
 import newhorizon.expand.entities.EntityRegister;
+import newhorizon.expand.map.NHMapFilters;
 import newhorizon.expand.net.NHCall;
 import newhorizon.util.DebugFunc;
 import newhorizon.util.ui.TableFunc;
@@ -203,6 +204,7 @@ public class NewHorizon extends Mod {
     @Override
     public void init() {
         NHVars.init();
+        NHMapFilters.load();
 
         Events.on(ClientLoadEvent.class, e -> {
             if (Vars.netServer != null) {
