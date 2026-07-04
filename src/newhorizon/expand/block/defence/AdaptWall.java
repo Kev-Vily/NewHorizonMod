@@ -137,19 +137,19 @@ public class AdaptWall extends Wall {
             return build instanceof AdaptWallBuild wall && build.block == this.block && wall.drawIndex == 13;
         }
 
-        //@Override
-        //public void drawSelect() {
-        //    super.drawSelect();
-        //    findLinkWalls();
-        //    for (Building wall : toDamage) {
-        //        Draw.color(team.color);
-        //        Draw.alpha(0.5f);
-        //        Fill.square(wall.x, wall.y, 2);
-        //    }
-        //    Draw.reset();
+        @Override
+        public void drawSelect() {
+            super.drawSelect();
+            findLinkWalls();
+            for (Building wall : toDamage) {
+                Draw.color(team.color);
+                Draw.alpha(0.5f);
+                Fill.square(wall.x, wall.y, 2);
+            }
+            Draw.reset();
 
-        //    drawPlaceText((drawIndex % 12) + "-" + (drawIndex / 12), tileX(), tileY(), true);
-        //}
+            //drawPlaceText((drawIndex % 12) + "-" + (drawIndex / 12), tileX(), tileY(), true);
+        }
 
         public void updateProximityWall() {
             connectedWalls.clear();
