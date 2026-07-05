@@ -148,7 +148,7 @@ public class AdaptWall extends Wall {
             }
             Draw.reset();
 
-            drawPlaceText((drawIndex % 12) + "-" + (drawIndex / 12), tileX(), tileY(), true);
+            //drawPlaceText((drawIndex % 12) + "-" + (drawIndex / 12), tileX(), tileY(), true);
         }
 
         public void updateProximityWall() {
