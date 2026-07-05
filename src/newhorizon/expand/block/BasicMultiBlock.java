@@ -155,6 +155,7 @@ public abstract class BasicMultiBlock extends Block implements MultiBlock {
 
         @Override
         public void updateLinkProximity() {
+            if(linkProximityMap == null) linkProximityMap = new Seq<>();
             if (linkEntities != null) {
                 linkProximityMap.clear();
                 //add link entity's proximity
@@ -210,7 +211,7 @@ public abstract class BasicMultiBlock extends Block implements MultiBlock {
 
         @Override
         public boolean dump(Item todump) {
-            if (!block.hasItems || items.total() == 0 || linkProximityMap.size == 0 || (todump != null && !items.has(todump)))
+            if(linkProximityMap == null || linkProximityMap.size == 0 || !block.hasItems || items.total() == 0 || (todump != null && !items.has(todump)))
                 return false;
             int dump = dumpIndex;
             for (int i = 0; i < linkProximityMap.size; i++) {
@@ -245,6 +246,7 @@ public abstract class BasicMultiBlock extends Block implements MultiBlock {
 
         @Override
         public void dumpLiquid(Liquid liquid, float scaling, int outputDir) {
+            if(linkProximityMap == null || linkProximityMap.size == 0) return;
             int dump = this.cdump;
             if (liquids.get(liquid) <= 0.0001f) return;
             if (!net.client() && state.isCampaign() && team == state.rules.defaultTeam) liquid.unlock();
@@ -267,6 +269,7 @@ public abstract class BasicMultiBlock extends Block implements MultiBlock {
 
         @Override
         public boolean dumpPayload(Payload todump) {
+            if(linkProximityMap == null || linkProximityMap.size == 0) return false;
             int dump = dumpIndex;
             for (int i = 0; i < linkProximityMap.size; ++i) {
                 int idx = (i + dump) % linkProximityMap.size;
@@ -290,6 +293,10 @@ public abstract class BasicMultiBlock extends Block implements MultiBlock {
         @Override
         public void offload(Item item) {
             produced(item, 1);
+            if(linkProximityMap == null || linkProximityMap.size == 0){
+                handleItem(this, item);
+                return;
+            }
             int dump = dumpIndex;
             for (int i = 0; i < linkProximityMap.size; i++) {
                 incrementDumpIndex(linkProximityMap.size);
