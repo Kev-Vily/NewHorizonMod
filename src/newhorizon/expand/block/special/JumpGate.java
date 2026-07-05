@@ -321,21 +321,33 @@ public class JumpGate extends Block {
             tiles = NHFunc.ableToSpawn(unitType(), x, y, maxRadius);
         }
 
-        public void spawnUnit() {
-            if (unitRecipe() == null) return;
-            if (unitType() == null) return;
+        public boolean spawnUnit() {
+            if (unitRecipe() == null) return false;
+            if (unitType() == null) return false;
+
+            float spawnX, spawnY;
+            if (tiles.isEmpty()) {
+                if (!unitType().flying) return false;
+                spawnX = x;
+                spawnY = y;
+            } else {
+                Tile t = tiles.random();
+                if (t == null) return false;
+                spawnX = t.worldx();
+                spawnY = t.worldy();
+            }
 
             if (!net.client()) {
                 float rot = core() == null ? Angles.angle(x, y, command.x, command.y) : Angles.angle(core().x, core().y, x, y);
                 Spawner spawner = new Spawner();
-                Tile t = tiles.random();
-                Tmp.v1.set(t.worldx(), t.worldy());
+                Tmp.v1.set(spawnX, spawnY);
                 spawner.init(unitType(), team, Tmp.v1, rot, Mathf.clamp(unitRecipe().craftTime / maxWarmupSpeed, 5f * 60, 15f * 60));
                 if (command != null) spawner.commandPos.set(command.cpy());
                 spawner.add();
             }
 
             speedMultiplier = Mathf.clamp(speedMultiplier + warmupPerSpawn, 1, maxWarmupSpeed);
+            return true;
         }
 
         @Override
@@ -353,11 +365,14 @@ public class JumpGate extends Block {
             }
             if (progress >= 1) {
                 findTiles();
+                boolean spawned = false;
                 for (int i = 0; i < spawnCount; i++) {
-                    spawnUnit();
+                    if (spawnUnit()) spawned = true;
                 }
-                consume();
-                progress = 0f;
+                if (spawned) {
+                    consume();
+                    progress = 0f;
+                }
             }
         }
 
