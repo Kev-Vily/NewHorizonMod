@@ -23,6 +23,11 @@ public class ActionLStatement extends LStatement {
     }
 
     @Override
+    public boolean privileged() {
+        return true;
+    }
+
+    @Override
     public void build(Table table) {
     }
 
