@@ -56,10 +56,16 @@ public class RuinFilterUI{
     }
 
     public static void showFloorPicker(RuinStep step, Runnable changed){
-        showBlockPicker("@filter.option.floor", () -> step.floor == null ? Blocks.air : step.floor, block -> {
-            step.floor = block == Blocks.air ? null : block;
+        showBlockPicker("@filter.option.floor", () -> floorDisplay(step), block -> {
+            if(block == Blocks.removeWall){
+                step.floor = Blocks.removeWall;
+            }else if(block == Blocks.air){
+                step.floor = null;
+            }else{
+                step.floor = block;
+            }
             changed.run();
-        }, FilterOption.floorsOptional, changed);
+        }, b -> b == Blocks.removeWall || FilterOption.floorsOptional.get(b), changed);
     }
 
     public static void showWallPicker(RuinStep step, Runnable changed){
@@ -79,6 +85,12 @@ public class RuinFilterUI{
             }
             changed.run();
         }, b -> b == Blocks.removeWall || FilterOption.wallsOptional.get(b), changed);
+    }
+
+    public static Block floorDisplay(RuinStep step){
+        if(step.preservesFloor()) return Blocks.removeWall;
+        if(step.floor == null) return Blocks.air;
+        return step.floor;
     }
 
     public static Block wallDisplay(RuinStep step){

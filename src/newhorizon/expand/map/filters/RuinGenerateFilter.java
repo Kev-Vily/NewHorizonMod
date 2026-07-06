@@ -105,7 +105,7 @@ public class RuinGenerateFilter extends GenerateFilter{
                         int cx = centerIndex % width, cy = centerIndex / width;
                         if(!step.matches(cx, cy, x, y)) continue;
 
-                        applyStep(computed[index], step, index);
+                        applyStep(computed[index], baseline[index], step, index);
                     }
                 }
             }
@@ -196,8 +196,11 @@ public class RuinGenerateFilter extends GenerateFilter{
         return null;
     }
 
-    private void applyStep(TileState state, RuinStep step, int index){
-        if(step.hasFloor()){
+    private void applyStep(TileState state, TileState baseline, RuinStep step, int index){
+        if(step.preservesFloor()){
+            state.floor = baseline.floor;
+            floorModified[index] = false;
+        }else if(step.hasFloor()){
             state.floor = step.floor;
             floorModified[index] = true;
         }

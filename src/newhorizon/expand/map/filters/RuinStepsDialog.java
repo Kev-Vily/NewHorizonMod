@@ -87,19 +87,25 @@ public class RuinStepsDialog extends BaseDialog{
             changed.run();
         }).width(96f).padRight(8);
 
-        Button floorButton = table.button(b -> b.image(step.floor == null ? Icon.none.getRegion() : step.floor.uiIcon).update(i -> ((TextureRegionDrawable)i.getDrawable())
-            .setRegion(step.floor == null ? Icon.none.getRegion() : step.floor.uiIcon)).size(iconSmall), () -> {
+        Button floorButton = table.button(b -> b.image(floorIcon(step)).update(i -> ((TextureRegionDrawable)i.getDrawable())
+            .setRegion(floorIcon(step))).size(iconSmall), () -> {
             RuinFilterUI.showFloorPicker(step, () -> {
                 rebuildList();
                 changed.run();
             });
         }).size(48f).padRight(4).get();
 
-        RuinFilterUI.bindBlockButton(floorButton, () -> step.floor == null ? Blocks.air : step.floor, block -> {
-            step.floor = block == Blocks.air ? null : block;
+        RuinFilterUI.bindBlockButton(floorButton, () -> RuinFilterUI.floorDisplay(step), block -> {
+            if(block == Blocks.removeWall){
+                step.floor = Blocks.removeWall;
+            }else if(block == Blocks.air){
+                step.floor = null;
+            }else{
+                step.floor = block;
+            }
             rebuildList();
             changed.run();
-        }, FilterOption.floorsOptional, () -> {
+        }, b -> b == Blocks.removeWall || FilterOption.floorsOptional.get(b), () -> {
             rebuildList();
             changed.run();
         });
@@ -149,6 +155,11 @@ public class RuinStepsDialog extends BaseDialog{
             rebuildList();
             changed.run();
         }).size(40f).padLeft(4);
+    }
+
+    private static arc.graphics.g2d.TextureRegion floorIcon(RuinStep step){
+        Block block = RuinFilterUI.floorDisplay(step);
+        return block == Blocks.air ? Icon.none.getRegion() : block.uiIcon;
     }
 
     private static arc.graphics.g2d.TextureRegion wallIcon(RuinStep step){

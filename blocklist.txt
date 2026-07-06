@@ -303,6 +303,7 @@ new-horizon-metal-floor-deep-groove 0 0 1 4145225
 new-horizon-metal-floor-groove 0 0 1 4145225
 new-horizon-metal-floor-high-ridge 0 0 1 4145225
 new-horizon-metal-floor-ridge 0 0 1 4145225
+new-horizon-metal-foundation 0 0 1 4145225
 new-horizon-metal-ground 0 0 1 4145225
 new-horizon-metal-ground-heat 0 0 1 11370475
 new-horizon-metal-ground-quantum 0 0 1 4145225

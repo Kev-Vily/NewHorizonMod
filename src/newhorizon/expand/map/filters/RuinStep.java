@@ -33,7 +33,11 @@ public class RuinStep implements Serializable{
     }
 
     public boolean hasFloor(){
-        return floor != null;
+        return floor != null && floor != Blocks.removeWall;
+    }
+
+    public boolean preservesFloor(){
+        return floor == Blocks.removeWall;
     }
 
     public boolean hasWall(){
@@ -69,7 +73,7 @@ public class RuinStep implements Serializable{
     }
 
     public static RuinStep removeWall(float radius){
-        RuinStep step = new RuinStep(radius, null, null);
+        RuinStep step = new RuinStep(radius, Blocks.removeWall, null);
         step.removeWall = true;
         return step;
     }
