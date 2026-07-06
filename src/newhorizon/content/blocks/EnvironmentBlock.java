@@ -32,7 +32,7 @@ public class EnvironmentBlock {
     armorFloor0, armorFloor1, armorFloor2, armorFloor3, armorFloor4, armorFloor5, armorFloor6, armorFloor7,
             platingFloor1, platingFloor2, platingFloor3, platingFloor4,
 
-    plateFloor,
+    plateFloor, labFloor,
 
     conglomerateWall, darkConglomerateWall, thoriumStoneWall,
             conglomerateBoulder, darkConglomerateBoulder,
@@ -320,13 +320,13 @@ public class EnvironmentBlock {
             drawEdgeIn = false;
         }};
 
-        platingFloor2 = new TiledFloor("plating-block") {{
-            useTiles = false;
-            //tileName = "plating-floor";
-            autotile = true;
-            drawEdgeOut = false;
-            drawEdgeIn = false;
-        }};
+        //platingFloor2 = new TiledFloor("plating-block") {{
+        //    useTiles = false;
+        //    //tileName = "plating-floor";
+        //    autotile = true;
+        //    drawEdgeOut = false;
+        //    drawEdgeIn = false;
+        //}};
 
         platingFloor3 = new TiledFloor("plating-floor-3") {
             {
@@ -359,7 +359,15 @@ public class EnvironmentBlock {
             addVariant(2, 2);
             addVariant(3, 3);
         }};
+
+        labFloor = new PlateFloor("lab-floor") {{
+            addVariant(4, 2);
+            addVariant(8, 2);
+        }};
+
         ((PlateFloor) plateFloor).loadBlocks();
+        ((PlateFloor) labFloor).loadBlocks();
+
 
         metalFloorPlain = new TiledFloor("plating-metal-floor") {{
             tileName = "plating-floor";

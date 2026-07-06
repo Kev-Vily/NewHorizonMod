@@ -737,6 +737,12 @@
 	"size": 1,
 	"color": 1061177855
 },
+"new-horizon-lab-floor": {
+	"synthetic": false,
+	"solid": false,
+	"size": 1,
+	"color": -1
+},
 "new-horizon-plate-floor-1-0": {
 	"synthetic": true,
 	"solid": true,
@@ -777,6 +783,30 @@
 	"synthetic": true,
 	"solid": true,
 	"size": 3,
+	"color": 255
+},
+"new-horizon-lab-floor-4-0": {
+	"synthetic": true,
+	"solid": true,
+	"size": 4,
+	"color": 255
+},
+"new-horizon-lab-floor-4-1": {
+	"synthetic": true,
+	"solid": true,
+	"size": 4,
+	"color": 255
+},
+"new-horizon-lab-floor-8-0": {
+	"synthetic": true,
+	"solid": true,
+	"size": 8,
+	"color": 255
+},
+"new-horizon-lab-floor-8-1": {
+	"synthetic": true,
+	"solid": true,
+	"size": 8,
 	"color": 255
 },
 "new-horizon-plating-metal-floor": {

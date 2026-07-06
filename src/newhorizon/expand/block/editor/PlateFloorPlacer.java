@@ -50,7 +50,6 @@ public class PlateFloorPlacer extends Block {
                     for(int dy = 0; dy < size; dy++){
                         Tile other = world.tile(tileX() + dx + o, tileY() + dy + o);
                         int index = dx + (size - 1 - dy) * size;
-                        Log.info(index);
                         if(other != null) {
                             other.data = (byte) (((type & 0x0F) << 4) | ((size - 1) & 0x0F));
                             other.floorData = (byte) index;
