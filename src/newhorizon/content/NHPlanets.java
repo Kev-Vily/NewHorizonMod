@@ -36,7 +36,7 @@ public class NHPlanets {
                 r.waves = true;
                 r.waveTeam = Team.blue;
                 r.placeRangeCheck = false;
-                r.showSpawns = true;
+                r.hideSpawns = false;
                 r.waveSpacing = 60 * Time.toSeconds;
                 r.initialWaveSpacing = 5f * Time.toMinutes;
                 r.hideBannedBlocks = true;

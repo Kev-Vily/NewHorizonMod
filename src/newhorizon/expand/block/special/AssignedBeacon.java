@@ -109,7 +109,7 @@ public class AssignedBeacon extends AdaptOverdriveProjector {
         }
 
         public Seq<Building> linkBuilds() {
-            return linkBuilds.keys().toArray();
+            return linkBuilds.keys().toSeq();
         }
 
         public void updateLink() {

@@ -23,6 +23,7 @@ import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
+import mindustry.ui.FileChooser;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
 import newhorizon.NewHorizon;
@@ -65,7 +66,7 @@ public class Tool_Internal {
                     original.clear();
                     preview.clear();
 
-                    Vars.platform.showMultiFileChooser(fi -> {
+                    FileChooser.open("properties").submit(fi -> {
                         Vars.ui.loadAnd("[accent]Loading Bundle", () -> {
                             toProcess = fi;
                             PropertiesUtils.load(bundleTG, toProcess.reader());
@@ -116,7 +117,7 @@ public class Tool_Internal {
                             func.get(original, ori);
                             func.get(preview, pre);
                         });
-                    }, "properties");
+                    });
                 }).growX().height(LEN).pad(OFFSET).row();
                 t.button("Storage", Icon.download, Styles.cleart, () -> {
                     int before = toProcess.readString().hashCode();

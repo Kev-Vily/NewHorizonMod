@@ -69,14 +69,25 @@ public class AdaptConduit extends Conduit {
 
         @Override
         public void draw() {
+            draw(false);
+        }
+
+        public void draw(boolean under) {
             Draw.z(Layer.block);
             Draw.scl(xscl, yscl);
-            drawAt(x, y, blendbits, rotation, SliceMode.none);
+            drawAt(x, y, blendbits, rotation, SliceMode.none, under);
             Draw.reset();
         }
 
         @Override
-        protected void drawAt(float x, float y, int bits, int rotation, SliceMode slice) {
+        protected void drawAt(float x, float y, int bits, int rotation, SliceMode slice, boolean under) {
+            if (under) {
+                float angle = rotation * 90f;
+                Draw.color(botColor);
+                Draw.rect(sliced(botRegions[bits], slice), x, y, angle);
+                return;
+            }
+
             float angle = rotation * 90f;
             Draw.color(botColor);
             Draw.rect(sliced(botRegions[bits], slice), x, y, angle);

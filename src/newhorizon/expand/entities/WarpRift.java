@@ -263,7 +263,7 @@ public class WarpRift extends NHBaseEntity implements Rotc, Teamc, Syncc {
     }
 
     @Override
-    public boolean isSyncHidden(Player player) {
+    public boolean isSyncHidden(Team team) {
         return false;
     }
 

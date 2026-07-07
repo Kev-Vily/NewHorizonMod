@@ -21,6 +21,7 @@ import mindustry.content.Fx;
 import mindustry.core.World;
 import mindustry.entities.*;
 import mindustry.entities.bullet.BulletType;
+import mindustry.game.Team;
 import mindustry.gen.*;
 import mindustry.graphics.Layer;
 import mindustry.graphics.Trail;
@@ -563,8 +564,8 @@ public class PesterEntity extends UnitEntity {
         bossWeaponReload_TARGET_ = bossWeaponReload;
     }
 
-    public boolean isSyncHidden(Player player) {
-        return nextTargets.isEmpty() && hatred.isEmpty() && !this.isShooting() && this.inFogTo(player.team());
+    public boolean isSyncHidden(Team team) {
+        return nextTargets.isEmpty() && hatred.isEmpty() && !this.isShooting() && this.inFogTo(team);
     }
 
     @Override

@@ -43,6 +43,7 @@ import mindustry.graphics.Pal;
 import mindustry.type.Item;
 import mindustry.type.ItemStack;
 import mindustry.type.UnitType;
+import mindustry.ui.FileChooser;
 import mindustry.ui.Links;
 import mindustry.ui.Styles;
 import mindustry.world.Tile;
@@ -431,12 +432,12 @@ public class TableFunc {
                                     selectPos(starter, poi -> {
                                         PixelArtGenerator.rightTop.set(poi.x, poi.y);
                                         Log.info(poi.x + " | " + poi.y);
-                                        platform.showMultiFileChooser(fi -> {
+                                        FileChooser.open("png").submit(fi -> {
                                             PixelArtGenerator.toRead = fi;
                                             boolean b = PixelArtGenerator.process();
                                             if (b) Vars.ui.showInfoToast("Generate Successful", 1);
                                             else Vars.ui.showInfoToast("Generate Failed", 1);
-                                        }, "png");
+                                        });
                                     });
                                 });
                             });
