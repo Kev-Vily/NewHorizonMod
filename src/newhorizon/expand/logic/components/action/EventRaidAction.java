@@ -5,7 +5,6 @@ import arc.flabel.FLabel;
 import arc.math.Angles;
 import arc.math.Mathf;
 import arc.math.Rand;
-import arc.util.Strings;
 import arc.util.Time;
 import arc.util.Tmp;
 import mindustry.entities.bullet.BulletType;
@@ -16,6 +15,7 @@ import newhorizon.expand.game.RaidState;
 import newhorizon.expand.logic.ParseUtil;
 import newhorizon.expand.logic.RaidBulletUtil;
 import newhorizon.expand.logic.components.Action;
+import newhorizon.expand.logic.components.ui.HudMarker;
 import newhorizon.expand.logic.components.ui.RaidMarker;
 import newhorizon.expand.logic.cutscene.types.RaidPreset;
 import newhorizon.expand.net.NHCall;
@@ -31,15 +31,19 @@ public class EventRaidAction extends Action {
 
     public int customBulletType = 1;
     public BulletType customBullet;
+    public BulletType keyBullet;
 
     public boolean overrideRaidStats = false, overrideDefaultCoordinate = false;
+    public boolean gatedByRaidState = true;
+    public boolean presentationOnly = false;
+    public boolean spawnBullets = true;
 
     public Team team = Team.crux;
     public float alertTime = 15f, raidTime = 5f, raidScale = 1, inaccuracy = 40f;
     public float sourceX = 0, sourceY = 0, targetX = 0, targetY = 0;
     public int syncSeed;
 
-    private boolean popupDisplayed;
+    private boolean alertSoundPlayed;
     private int raidCounter;
 
     @Override
@@ -90,16 +94,27 @@ public class EventRaidAction extends Action {
         }
 
         duration = alertTime + raidTime;
-        raidScale *= RaidState.scale();
+        if (gatedByRaidState) {
+            raidScale *= RaidState.scale();
+        }
     }
 
     @Override
     public void begin() {
+        if (syncSeed == 0) syncSeed = (int) Time.time;
+        // World processors also run on remote clients; CSS-created raids must not present
+        // locally there — RaidAlertPacket owns client UI.
+        if (RaidLogic.isRemoteClient() && !presentationOnly) {
+            lifeTimer = duration;
+            return;
+        }
+        if (newhorizon.NHVars.worldData != null) {
+            newhorizon.NHVars.worldData.eventSaveData.track(this);
+        }
         if (!headless) {
             showRaidPresentation();
         }
-        if (syncSeed == 0) syncSeed = (int) Time.time;
-        if (net.server() && net.active()) {
+        if (!presentationOnly && net.server() && net.active()) {
             NHCall.syncRaidAlert(this);
         }
     }
@@ -107,54 +122,70 @@ public class EventRaidAction extends Action {
     public void applyNetworkState(float lifeTimer, int raidCounter) {
         this.lifeTimer = lifeTimer;
         this.raidCounter = raidCounter;
-        if (lifeTimer > alertTime) popupDisplayed = true;
+        if (lifeTimer > alertTime) alertSoundPlayed = true;
     }
 
     public int raidCounter() {
         return raidCounter;
     }
 
-    private void showRaidPresentation() {
-        showRaidToast();
-        NHUIFunc.showLabel(4.5f, t -> {
-            t.background(Styles.black5);
-            t.table(t2 -> {
-                var icon = Core.atlas.find(warningIconName());
-                if (icon.width == 192) {
-                    t2.table(left -> left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(0, 0, 0, -9).color(team.color).row()).pad(0).growX();
-                    t2.image(icon).fill().color(team.color);
-                    t2.table(right -> right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(0, -9, 0, 0).color(team.color).row()).pad(0).growX();
-                } else if (icon.width == 288) {
-                    t2.table(left -> {
-                        left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(-42, 0, 0, -17).color(team.color).row();
-                        left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(0, 0, -42, -17).color(team.color).row();
-                    }).pad(0).growX();
-                    t2.image(icon).fill().color(team.color);
-                    t2.table(right -> {
-                        right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(-42, -17, 0, 0).color(team.color).row();
-                        right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(0, -17, -42, 0).color(team.color).row();
-                    }).pad(0).growX();
-                } else if (icon.width == 384) {
-                    t2.table(left -> {
-                        left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padBottom(25f).padRight(-14).color(team.color).row();
-                        left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padRight(-52).color(team.color).row();
-                        left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padTop(25f).padRight(-14).color(team.color).row();
-                    }).pad(0).growX();
-                    t2.image(icon).fill().color(team.color);
-                    t2.table(right -> {
-                        right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padBottom(25f).padLeft(-14).color(team.color).row();
-                        right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padLeft(-52).color(team.color).row();
-                        right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padTop(25f).padLeft(-14).color(team.color).row();
-                    }).pad(0).growX();
-                } else {
-                    t2.image(icon).fill().color(team.color);
-                }
-            }).growX().pad(OFFSET / 2).fillY().row();
+    @Override
+    public void end() {
+        if (newhorizon.NHVars.worldData != null) {
+            newhorizon.NHVars.worldData.eventSaveData.untrack(this);
+        }
+    }
 
-            t.table(l -> l.add(new FLabel("<< " + Core.bundle.get(alertBundleKey()) + " >>")).color(team.color).padBottom(4).row()).growX().fillY();
-        });
+    private void showRaidPresentation() {
+        boolean restore = lifeTimer > 0.5f;
+        if (!restore) {
+            raidType.raidAlarmSound.play();
+            NHUIFunc.showLabel(4.5f, t -> {
+                t.background(Styles.black5);
+                t.table(t2 -> {
+                    var icon = Core.atlas.find(warningIconName());
+                    if (icon.width == 192) {
+                        t2.table(left -> left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(0, 0, 0, -9).color(team.color).row()).pad(0).growX();
+                        t2.image(icon).fill().color(team.color);
+                        t2.table(right -> right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(0, -9, 0, 0).color(team.color).row()).pad(0).growX();
+                    } else if (icon.width == 288) {
+                        t2.table(left -> {
+                            left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(-42, 0, 0, -17).color(team.color).row();
+                            left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(0, 0, -42, -17).color(team.color).row();
+                        }).pad(0).growX();
+                        t2.image(icon).fill().color(team.color);
+                        t2.table(right -> {
+                            right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(-42, -17, 0, 0).color(team.color).row();
+                            right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).pad(0, -17, -42, 0).color(team.color).row();
+                        }).pad(0).growX();
+                    } else if (icon.width == 384) {
+                        t2.table(left -> {
+                            left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padBottom(25f).padRight(-14).color(team.color).row();
+                            left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padRight(-52).color(team.color).row();
+                            left.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padTop(25f).padRight(-14).color(team.color).row();
+                        }).pad(0).growX();
+                        t2.image(icon).fill().color(team.color);
+                        t2.table(right -> {
+                            right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padBottom(25f).padLeft(-14).color(team.color).row();
+                            right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padLeft(-52).color(team.color).row();
+                            right.image().growX().height(OFFSET / 2).pad(OFFSET / 3).padTop(25f).padLeft(-14).color(team.color).row();
+                        }).pad(0).growX();
+                    } else {
+                        t2.image(icon).fill().color(team.color);
+                    }
+                }).growX().pad(OFFSET / 2).fillY().row();
+
+                t.table(l -> l.add(new FLabel("<< " + Core.bundle.get(alertBundleKey()) + " >>")).color(team.color).padBottom(4).row()).growX().fillY();
+            });
+        }
+
+        if (lifeTimer >= alertTime) return;
 
         RaidMarker marker = new RaidMarker();
+        marker.setKind(HudMarker.Kind.RAID);
+        marker.setMarkerTeam(team);
+        marker.setMinimapIcon(warningIconName());
+        marker.setSyncSeed(syncSeed);
         marker.setMarkPosition(targetX, targetY)
                 .setDuration(alertTime)
                 .bindLifeTimer(() -> this.lifeTimer);
@@ -168,10 +199,11 @@ public class EventRaidAction extends Action {
 
     @Override
     public void act() {
-        updateRaidPopup();
+        updateAlertSound();
 
-        if (RaidLogic.isRemoteClient()) return;
-        if (!RaidState.enabled()) return;
+        if (presentationOnly || RaidLogic.isRemoteClient()) return;
+        if (!spawnBullets) return;
+        if (gatedByRaidState && !RaidState.enabled()) return;
 
         int raidCount = Mathf.round(Mathf.maxZero(lifeTimer - alertTime) / Time.toSeconds * raidScale);
         int raid = raidCount - raidCounter;
@@ -184,11 +216,11 @@ public class EventRaidAction extends Action {
         }
     }
 
-    private void updateRaidPopup() {
+    private void updateAlertSound() {
         if (headless) return;
-        if (lifeTimer > alertTime && !popupDisplayed) {
-            popupDisplayed = true;
-            showRaidToast();
+        if (lifeTimer > alertTime && !alertSoundPlayed) {
+            alertSoundPlayed = true;
+            raidType.raidAlarmSound.play();
         }
     }
 
@@ -200,6 +232,7 @@ public class EventRaidAction extends Action {
 
     public void createBullet(Rand rand, int index) {
         BulletType bt = bulletType();
+        if (bt == null) return;
         rand.setSeed(syncSeed + index * 7919);
         float spread = inaccuracy;
         Tmp.v1.trns(rand.random(360f), rand.random(spread));
@@ -210,33 +243,22 @@ public class EventRaidAction extends Action {
         float sy = sourceY + Tmp.v2.y;
         float dst = Mathf.dst(sx, sy, tx, ty);
         float ang = Angles.angle(sx, sy, tx, ty);
-        RaidBulletUtil.spawn(bt, team, sx, sy, ang, -1, 1f, dst, tx, ty);
+        RaidBulletUtil.spawn(bt, team, sx, sy, ang, -1, 1f, dst, tx, ty, keyBullet);
     }
 
     public String alertBundleKey() {
-        if (customBullet != null) return RaidBulletUtil.alertKey(customBullet);
+        BulletType key = keyBullet != null ? keyBullet : customBullet;
+        if (key != null) return RaidBulletUtil.alertKey(key);
         if (raidType == RaidPreset.CUSTOM_RAID) return RaidBulletUtil.alertKey(customBulletType);
         return "css-raid." + raidType.name().replace("_", "-").toLowerCase() + ".alert";
     }
 
-    public String popupBundleKey() {
-        if (customBullet != null) return RaidBulletUtil.popupKey(customBullet);
-        if (raidType == RaidPreset.CUSTOM_RAID) return RaidBulletUtil.popupKey(customBulletType);
-        return "css-raid." + raidType.name().replace("_", "-").toLowerCase() + ".popup";
-    }
-
     public String warningIconName() {
-        if (customBullet != null) return RaidBulletUtil.warningIcon(customBullet);
+        BulletType key = keyBullet != null ? keyBullet : customBullet;
+        if (key != null) return RaidBulletUtil.warningIcon(key);
         if (raidType == RaidPreset.CUSTOM_RAID) return RaidBulletUtil.warningIcon(customBulletType);
         return raidType.warningIcon;
     }
 
-    public void showRaidToast() {
-        NHUIFunc.showToast(
-                Core.atlas.find(warningIconName()),
-                Core.bundle.format(popupBundleKey(), Strings.fixed(targetX / tilesize, 1), Strings.fixed(targetY / tilesize, 1)),
-                raidType.raidAlarmSound,
-                team.color
-        );
-    }
 }
+

@@ -29,6 +29,7 @@ import newhorizon.expand.map.NHMapFilters;
 import newhorizon.expand.net.NHCall;
 import newhorizon.util.DebugFunc;
 import newhorizon.util.ui.TableFunc;
+import newhorizon.util.ui.dialog.NHCampaignRulesDialog;
 import newhorizon.util.ui.dialog.NewFeatureDialog;
 
 import static mindustry.Vars.*;
@@ -51,9 +52,11 @@ public class NewHorizon extends Mod {
     public NewHorizon() {
         DEBUGGING = NHSetting.getBool(NHSetting.DEBUGGING);
 
+        Events.run(EventType.Trigger.universeDrawBegin, NHPlanets::updateRingWorldCamera);
         Events.on(EventType.ContentInitEvent.class, e -> NHPostProcess.postProcessOverride());
         Events.on(EventType.PlayerConnect.class, e -> Call.clientPacketReliable("override_check", NHSetting.overrideStatus()));
         Events.on(ClientLoadEvent.class, e -> {
+            Vars.ui.campaignRules = new NHCampaignRulesDialog();
             Core.app.post(NHUI::init);
             updateServer();
             fetchNewRelease();
@@ -233,6 +236,7 @@ public class NewHorizon extends Mod {
     public void registerServerCommands(CommandHandler handler) {
         super.registerServerCommands(handler);
         registerSetScaleCommand(handler);
+        registerSetInterventionCommand(handler);
     }
 
     private void registerSetScaleCommand(CommandHandler handler) {
@@ -245,6 +249,20 @@ public class NewHorizon extends Mod {
                 NHCall.setRaidScale(Mathf.clamp(Float.parseFloat(args[0]), 0f, 1f), player);
             } catch (NumberFormatException e) {
                 if (player != null) player.sendMessage("[scarlet]" + Core.bundle.get("command.setscale.usage"));
+            }
+        });
+    }
+
+    private void registerSetInterventionCommand(CommandHandler handler) {
+        handler.<Player>register("setintervention", "<0-1>", Core.bundle.get("command.setintervention.desc", "Set event intervention scale (0=off, 1=on)."), (args, player) -> {
+            if (args.length == 0) {
+                if (player != null) player.sendMessage("[scarlet]" + Core.bundle.get("command.setintervention.usage"));
+                return;
+            }
+            try {
+                NHCall.setInterventionScale(Mathf.clamp(Float.parseFloat(args[0]), 0f, 1f), player);
+            } catch (NumberFormatException e) {
+                if (player != null) player.sendMessage("[scarlet]" + Core.bundle.get("command.setintervention.usage"));
             }
         });
     }
@@ -282,6 +300,7 @@ public class NewHorizon extends Mod {
         NHStatusEffects.load();
         NHItems.load();
         NHLiquids.load();
+        NHParticleStreams.load();
         NHBullets.load();
         NHUnitTypes.load();
         NHBlocks.load();

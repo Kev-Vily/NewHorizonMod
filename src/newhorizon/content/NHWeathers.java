@@ -12,6 +12,9 @@ import arc.util.Tmp;
 import mindustry.gen.WeatherState;
 import mindustry.type.Weather;
 import mindustry.world.meta.Attribute;
+import mindustry.graphics.Pal;
+import mindustry.gen.Sounds;
+import newhorizon.expand.weather.MatterStorm;
 import newhorizon.util.func.MathUtil;
 
 import static mindustry.Vars.renderer;
@@ -35,9 +38,6 @@ public class NHWeathers {
         quantumField = new Weather("quantum-weather") {
             {
                 duration = 10f * Time.toMinutes;
-                statusAir = statusGround = true;
-                status = NHStatusEffects.quantization;
-                statusDuration = 60f;
                 attrs.set(Attribute.light, -0.3f);
                 opacityMultiplier = 0.47f;
             }
@@ -50,14 +50,11 @@ public class NHWeathers {
             }
         };
 
-        /*
         quantumStorm = new MatterStorm("quantum-storm") {{
             status = NHStatusEffects.ultFireBurn;
             statusDuration = 15f;
             rotateBullets = true;
-
             buildingEmp = 0.4f;
-
             textureColor = primaryColor = NHColor.darkEnrColor;
             secondaryColor = NHColor.lightSkyBack;
             bulletSpawnChance *= 1.5f;
@@ -67,18 +64,14 @@ public class NHWeathers {
             {
                 status = NHStatusEffects.emp2;
                 statusDuration = 60f;
-
                 buildingEmp = 0.125f;
-                force = 4;
-                noise = Sounds.fire;
-
+                force = 4f;
+                noise = Sounds.explosion;
                 primaryColor = Pal.accent;
                 textureColor = secondaryColor = Pal.ammo;
-
                 attrs.set(Attribute.heat, 2f);
             }
         };
-         */
     }
 
     static void drawQuantumHexParticles(float intensity, float opacity) {

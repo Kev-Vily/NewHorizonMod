@@ -17,11 +17,16 @@ import mindustry.entities.Effect;
 import mindustry.entities.units.BuildPlan;
 import mindustry.gen.Building;
 import mindustry.gen.Sounds;
+import mindustry.graphics.Pal;
 import mindustry.logic.LAccess;
 import mindustry.type.Item;
 import mindustry.type.ItemStack;
 import mindustry.type.Liquid;
 import mindustry.type.LiquidStack;
+import mindustry.ui.Bar;
+import mindustry.world.Tile;
+import mindustry.world.blocks.heat.HeatConsumer;
+import mindustry.world.blocks.liquid.Conduit.ConduitBuild;
 import mindustry.world.draw.DrawBlock;
 import mindustry.world.draw.DrawDefault;
 import mindustry.world.meta.BlockFlag;
@@ -30,6 +35,7 @@ import mindustry.world.meta.StatUnit;
 import mindustry.world.meta.StatValues;
 import newhorizon.expand.block.BasicMultiBlock;
 import newhorizon.expand.block.inner.LinkBlock;
+import newhorizon.content.NHStats;
 
 import static mindustry.Vars.*;
 
@@ -41,6 +47,10 @@ public class MultiBlockCrafter extends BasicMultiBlock {
 
     public boolean dumpExtraLiquid = true;
     public boolean ignoreLiquidFullness = false;
+    public boolean heatBoostEnabled = false;
+    public float heatRequirement = 6f;
+    public float heatEfficiencyIncrease;
+    public float heatOutputIncrease = 1f;
 
     public float craftTime = 80;
     public Effect craftEffect = Fx.none;
@@ -74,6 +84,11 @@ public class MultiBlockCrafter extends BasicMultiBlock {
             stats.add(Stat.productionTime, craftTime / 60f, StatUnit.seconds);
         if (outputItems != null) stats.add(Stat.output, StatValues.items(craftTime, outputItems));
         if (outputLiquids != null) stats.add(Stat.output, StatValues.liquids(1f, outputLiquids));
+        if (heatBoostEnabled && heatRequirement > 0f) {
+            stats.add(Stat.booster, heatRequirement, StatUnit.heatUnits);
+            stats.add(Stat.maxEfficiency, (1f + Math.max(heatEfficiencyIncrease, 0f)) * 100f, StatUnit.percent);
+            stats.add(NHStats.maxOutputIncrease, Math.max(heatOutputIncrease, 0f) * 100f, StatUnit.percent);
+        }
 
         stats.remove(Stat.size);
         stats.add(Stat.size, "@x@", getMaxSize(size, 0).x, getMaxSize(size, 0).y);
@@ -92,6 +107,16 @@ public class MultiBlockCrafter extends BasicMultiBlock {
             for (var stack : outputLiquids) {
                 addLiquidBar(stack.liquid);
             }
+        }
+
+        if (heatBoostEnabled) {
+            addBar("heat", (AdaptCrafterBuild build) -> new Bar(
+                    () -> Core.bundle.format("bar.heatamount", (int)(build.heat + 0.001f)) + " | "
+                            + Core.bundle.format("nh.bar.efficiency", (int)(build.efficiencyMultiplier() * 100f + 0.001f)) + " | "
+                            + Core.bundle.format("nh.bar.output", (int)(build.outputMultiplier() * 100f + 0.001f)),
+                    () -> Pal.lightOrange,
+                    () -> heatRequirement <= 0f ? 0f : Mathf.clamp(build.heat / heatRequirement)
+            ));
         }
     }
 
@@ -127,6 +152,21 @@ public class MultiBlockCrafter extends BasicMultiBlock {
     }
 
     @Override
+    public boolean rotatedOutput(int fromX, int fromY, Tile destination) {
+        if (!(destination.build instanceof ConduitBuild)) return false;
+
+        Building crafter = world.build(fromX, fromY);
+        if (crafter == null) return false;
+        if (liquidOutputDirections == null) return false;
+        int relative = Mathf.mod(crafter.relativeTo(destination) - crafter.rotation, 4);
+        for (int direction : liquidOutputDirections) {
+            if (direction == -1 || direction == relative) return false;
+        }
+
+        return true;
+    }
+
+    @Override
     public void drawPlanRegion(BuildPlan plan, Eachable<BuildPlan> list) {
         drawer.drawPlan(this, plan, list);
     }
@@ -146,10 +186,13 @@ public class MultiBlockCrafter extends BasicMultiBlock {
         drawer.getRegionsToOutline(this, out);
     }
 
-    public class AdaptCrafterBuild extends BasicMultiBuilding {
+    public class AdaptCrafterBuild extends BasicMultiBuilding implements HeatConsumer {
         public float progress;
         public float totalProgress;
         public float warmup;
+        public float[] sideHeat = new float[4];
+        public float[] outputAccumulator;
+        public float heat;
 
         @Override
         public void draw() {
@@ -166,7 +209,7 @@ public class MultiBlockCrafter extends BasicMultiBlock {
         public boolean shouldConsume() {
             if (outputItems != null) {
                 for (var output : outputItems) {
-                    if (items.get(output.item) + output.amount > itemCapacity) {
+                    if (items.get(output.item) + Mathf.ceil(output.amount * outputMultiplier()) > itemCapacity) {
                         return false;
                     }
                 }
@@ -196,11 +239,12 @@ public class MultiBlockCrafter extends BasicMultiBlock {
         @Override
         public void updateTile() {
             super.updateTile();
+            heat = heatBoostEnabled && enabled ? calculateHeat(sideHeat) : 0f;
             if (efficiency > 0) {
-                progress += getProgressIncrease(craftTime);
+                progress += getProgressIncrease(craftTime) * efficiencyMultiplier();
                 warmup = Mathf.approachDelta(warmup, warmupTarget(), warmupSpeed);
                 if (outputLiquids != null) {
-                    float inc = getProgressIncrease(1f);
+                    float inc = getProgressIncrease(1f) * efficiencyMultiplier() * outputMultiplier();
                     for (var output : outputLiquids) {
                         handleLiquid(this, output.liquid, Math.min(output.amount * inc, liquidCapacity - liquids.get(output.liquid)));
                     }
@@ -227,7 +271,8 @@ public class MultiBlockCrafter extends BasicMultiBlock {
             if (outputLiquids != null) {
                 max = 0f;
                 for (var s : outputLiquids) {
-                    float value = (liquidCapacity - liquids.get(s.liquid)) / (s.amount * edelta());
+                    float value = (liquidCapacity - liquids.get(s.liquid))
+                            / (s.amount * efficiencyMultiplier() * outputMultiplier() * edelta());
                     scaling = Math.min(scaling, value);
                     max = Math.max(max, value);
                 }
@@ -235,6 +280,26 @@ public class MultiBlockCrafter extends BasicMultiBlock {
 
             //when dumping excess take the maximum value instead of the minimum.
             return super.getProgressIncrease(baseTime) * (dumpExtraLiquid ? Math.min(max, 1f) : scaling);
+        }
+
+        public float outputMultiplier() {
+            if (!heatBoostEnabled || heatRequirement <= 0f) return 1f;
+            return 1f + Mathf.clamp(heat / heatRequirement) * Math.max(heatOutputIncrease, 0f);
+        }
+
+        public float efficiencyMultiplier() {
+            if (!heatBoostEnabled || heatRequirement <= 0f) return 1f;
+            return 1f + Mathf.clamp(heat / heatRequirement) * Math.max(heatEfficiencyIncrease, 0f);
+        }
+
+        @Override
+        public float[] sideHeat() {
+            return sideHeat;
+        }
+
+        @Override
+        public float heatRequirement() {
+            return heatBoostEnabled ? Math.max(MultiBlockCrafter.this.heatRequirement, 0f) : 0f;
         }
 
         public float warmupTarget() {
@@ -255,15 +320,22 @@ public class MultiBlockCrafter extends BasicMultiBlock {
             consume();
 
             if (outputItems != null) {
-                for (var output : outputItems) {
-                    for (int i = 0; i < output.amount; i++) {
+                if (outputAccumulator == null || outputAccumulator.length != outputItems.length) {
+                    outputAccumulator = new float[outputItems.length];
+                }
+                for (int i = 0; i < outputItems.length; i++) {
+                    var output = outputItems[i];
+                    outputAccumulator[i] += output.amount * outputMultiplier();
+                    int amount = Mathf.floor(outputAccumulator[i]);
+                    outputAccumulator[i] -= amount;
+                    for (int j = 0; j < amount; j++) {
                         offload(output.item);
                     }
                 }
             }
 
             if (wasVisible) {
-                craftEffect.at(x, y);
+                craftEffect.at(x, y, rotdeg());
             }
             progress %= 1f;
         }
@@ -277,8 +349,11 @@ public class MultiBlockCrafter extends BasicMultiBlock {
             }
 
             if (outputLiquids != null) {
-                for (LiquidStack liquid : outputLiquids) {
-                    dumpLiquid(liquid.liquid, 2f);
+                for (int i = 0; i < outputLiquids.length; i++) {
+                    LiquidStack liquid = outputLiquids[i];
+                    int direction = liquidOutputDirections != null && liquidOutputDirections.length > i
+                            ? liquidOutputDirections[i] : -1;
+                    dumpLiquid(liquid.liquid, 2f, direction);
                 }
             }
         }

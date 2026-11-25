@@ -5,14 +5,17 @@ import mindustry.Vars;
 import newhorizon.expand.game.NHWorldData;
 import newhorizon.expand.logic.components.CutsceneControl;
 import newhorizon.expand.logic.components.CutsceneUI;
+import newhorizon.expand.units.probe.ProbeColonyManager;
 import newhorizon.util.game.UpdateProxy;
 import newhorizon.util.graphic.ScreenShaderDrawer;
+import newhorizon.util.graphic.VortexHitRenderer;
 import newhorizon.util.ui.TableFunc;
 
 public class NHVars {
     public static NHModCore core;
     public static NHWorldData worldData;
     public static NHRenderer renderer;
+    public static VortexHitRenderer vortexRenderer;
 
     public static CutsceneControl cutscene;
     public static CutsceneUI cutsceneUI;
@@ -21,6 +24,7 @@ public class NHVars {
         if (core != null) return;
 
         worldData = new NHWorldData();
+        ProbeColonyManager.init();
 
         UpdateProxy.init();
 
@@ -36,6 +40,7 @@ public class NHVars {
 
     public static void initHeadless() {
         renderer = new NHRenderer();
+        vortexRenderer = new VortexHitRenderer();
         ScreenShaderDrawer.init();
 
         NHSetting.loadUI();

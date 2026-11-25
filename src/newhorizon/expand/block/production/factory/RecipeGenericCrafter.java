@@ -269,7 +269,11 @@ public class RecipeGenericCrafter extends MultiBlockCrafter {
                     dumpPayload(payload);
                 });
             }
-            liquidOutput.each(output -> dumpLiquid(output, 2f, -1));
+            for (int i = 0; i < liquidOutput.size; i++) {
+                int direction = liquidOutputDirections != null && liquidOutputDirections.length > i
+                        ? liquidOutputDirections[i] : -1;
+                dumpLiquid(liquidOutput.get(i), 2f, direction);
+            }
         }
 
         @Override
@@ -315,7 +319,7 @@ public class RecipeGenericCrafter extends MultiBlockCrafter {
 
             progress %= 1f;
 
-            if (wasVisible) craftEffect.at(x, y);
+            if (wasVisible) craftEffect.at(x, y, rotdeg());
             updateRecipe();
         }
 

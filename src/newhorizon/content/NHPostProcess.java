@@ -36,6 +36,7 @@ import newhorizon.NHSetting;
 import newhorizon.content.units.GroundUnitTypes;
 import newhorizon.expand.ability.passive.PassiveShield;
 import newhorizon.expand.bullets.AdaptedLightningBulletType;
+import newhorizon.expand.logic.cutscene.ExtendedCutsceneZoom;
 
 import java.lang.reflect.Field;
 import java.util.Objects;
@@ -339,6 +340,7 @@ public class NHPostProcess {
     }
 
     public static void postProcessOverride() {
+        ExtendedCutsceneZoom.load();
         overrideStats();
     }
 
@@ -346,7 +348,7 @@ public class NHPostProcess {
         for (Block block : content.blocks()) {
             if (block.name.startsWith("new-horizon")) {
                 block.shownPlanets.clear();
-                block.shownPlanets.addAll(Planets.serpulo, Planets.erekir, NHPlanets.midantha);
+                block.shownPlanets.addAll(Planets.serpulo, Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld);
             }
         }
 
@@ -355,15 +357,22 @@ public class NHPostProcess {
                 NHItems.presstanium, NHItems.juniorProcessor, NHItems.carbide, NHItems.metalOxhydrigen,
                 NHItems.surgeAlloy, NHItems.phaseFabric, NHItems.multipleSteel, NHItems.seniorProcessor,
                 NHItems.irayrondPanel, NHItems.setonAlloy, NHItems.nodexPlate, NHItems.ancimembrane,
-                NHItems.fusionEnergy, NHItems.thermoCorePositive, NHItems.thermoCoreNegative, NHItems.darkEnergy
+                NHItems.fusionEnergy, NHItems.thermoCorePositive, NHItems.thermoCoreNegative, NHItems.darkEnergy,
+                NHItems.hadronicomp,NHItems.hyperProcessor
         );
 
         Seq<Liquid> liquids = Seq.with(NHLiquids.quantumLiquid, NHLiquids.xenFluid, NHLiquids.zetaFluidPositive, NHLiquids.zetaFluidNegative, NHLiquids.irdryonFluid);
 
-        content.items().each(item -> item.shownPlanets.remove(NHPlanets.midantha));
-        content.liquids().each(liquid -> liquid.shownPlanets.remove(NHPlanets.midantha));
-        items.each(item -> item.shownPlanets.addAll(Planets.serpulo, Planets.erekir, NHPlanets.midantha));
-        liquids.each(liquid -> liquid.shownPlanets.addAll(Planets.serpulo, Planets.erekir, NHPlanets.midantha));
+        content.items().each(item -> {
+            item.shownPlanets.remove(NHPlanets.midantha);
+            item.shownPlanets.remove(NHPlanets.ringWorld);
+        });
+        content.liquids().each(liquid -> {
+            liquid.shownPlanets.remove(NHPlanets.midantha);
+            liquid.shownPlanets.remove(NHPlanets.ringWorld);
+        });
+        items.each(item -> item.shownPlanets.addAll(Planets.serpulo, Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld));
+        liquids.each(liquid -> liquid.shownPlanets.addAll(Planets.serpulo, Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld));
     }
 
     public static Seq<SpawnGroup> generate(float difficulty, boolean airOnly) {
@@ -628,52 +637,52 @@ public class NHPostProcess {
         adjustContent(Blocks.message, content -> {
             MessageBlock logicBlock = (MessageBlock) content;
             logicBlock.requirements = ItemStack.with(Items.silicon, 5);
-            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha);
+            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld);
         });
         adjustContent(Blocks.reinforcedMessage, content -> {
             MessageBlock logicBlock = (MessageBlock) content;
             logicBlock.requirements = ItemStack.with(Items.silicon, 5);
-            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha);
+            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld);
         });
         adjustContent(Blocks.switchBlock, content -> {
             SwitchBlock logicBlock = (SwitchBlock) content;
             logicBlock.requirements = ItemStack.with(Items.silicon, 5);
-            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha);
+            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld);
         });
         adjustContent(Blocks.microProcessor, content -> {
             LogicBlock logicBlock = (LogicBlock) content;
             logicBlock.requirements = ItemStack.with(Items.silicon, 50, Items.titanium, 50);
-            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha);
+            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld);
         });
         adjustContent(Blocks.logicProcessor, content -> {
             LogicBlock logicBlock = (LogicBlock) content;
             logicBlock.requirements = ItemStack.with(NHItems.juniorProcessor, 50, NHItems.presstanium, 50);
-            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha);
+            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld);
         });
         adjustContent(Blocks.hyperProcessor, content -> {
             LogicBlock logicBlock = (LogicBlock) content;
             logicBlock.requirements = ItemStack.with(NHItems.juniorProcessor, 100, NHItems.zeta, 200, Items.surgeAlloy, 150);
-            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha);
+            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld);
         });
         adjustContent(Blocks.memoryCell, content -> {
             MemoryBlock logicBlock = (MemoryBlock) content;
             logicBlock.requirements = ItemStack.with(Items.silicon, 30);
-            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha);
+            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld);
         });
         adjustContent(Blocks.memoryBank, content -> {
             MemoryBlock logicBlock = (MemoryBlock) content;
             logicBlock.requirements = ItemStack.with(Items.silicon, 80, Items.phaseFabric, 40);
-            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha);
+            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld);
         });
         adjustContent(Blocks.logicDisplay, content -> {
             LogicDisplay logicBlock = (LogicDisplay) content;
             logicBlock.requirements = ItemStack.with(Items.silicon, 50);
-            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha);
+            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld);
         });
         adjustContent(Blocks.largeLogicDisplay, content -> {
             LogicDisplay logicBlock = (LogicDisplay) content;
             logicBlock.requirements = ItemStack.with(Items.silicon, 150, Items.phaseFabric, 75);
-            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha);
+            logicBlock.shownPlanets.addAll(Planets.erekir, NHPlanets.midantha, NHPlanets.ringWorld);
         });
     }
 
@@ -1299,35 +1308,38 @@ public class NHPostProcess {
         adjustContent(Blocks.coreShard, content -> {
             CoreBlock core = (CoreBlock) content;
             core.buildVisibility = BuildVisibility.shown;
-            //core.health *= 5;
+            core.health *= 5;
             core.armor = 5;
         });
 
         adjustContent(Blocks.coreFoundation, content -> {
             CoreBlock core = (CoreBlock) content;
-            //core.health *= 5;
+            core.health *= 5;
             core.armor = 10;
         });
 
         adjustContent(Blocks.coreNucleus, content -> {
             CoreBlock core = (CoreBlock) content;
-            //core.health *= 5;
+            core.health *= 5;
             core.armor = 15;
         });
 
 
         adjustContent(Blocks.coreBastion, content -> {
             CoreBlock core = (CoreBlock) content;
+            core.health *= 2;
             core.incinerateNonBuildable = false;
             core.requiresCoreZone = false;
         });
         adjustContent(Blocks.coreCitadel, content -> {
             CoreBlock core = (CoreBlock) content;
+            core.health *= 2;
             core.incinerateNonBuildable = false;
             core.requiresCoreZone = false;
         });
         adjustContent(Blocks.coreAcropolis, content -> {
             CoreBlock core = (CoreBlock) content;
+            core.health *= 2;
             core.incinerateNonBuildable = false;
             core.requiresCoreZone = false;
         });

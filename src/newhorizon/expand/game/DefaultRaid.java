@@ -34,7 +34,7 @@ import static mindustry.Vars.*;
 import static newhorizon.NHVars.cutscene;
 
 public class DefaultRaid {
-    private static final float PROTECTION_TIME = 300f;
+    private static final float PROTECTION_TIME = 600f;
     private static final float COOLDOWN_MIN = 60f;
     private static final float COOLDOWN_RANGE = 120f;
     private static final int OVERRIDE_CHECK_INTERVAL = 120;
@@ -126,12 +126,40 @@ public class DefaultRaid {
         return null;
     }
 
+    public static void restoreAction(ActionBus bus, EventRaidAction action) {
+        if (bus == null || action == null) return;
+        currentRaidBus = bus;
+        raidRunning = true;
+    }
+
     public static void register(int id, BulletType bullet, float alertTime, float raidTime, float raidScale, float inaccuracy) {
         raids.put(id, new RaidEvent(id, bullet, alertTime, raidTime, raidScale, inaccuracy));
     }
 
     public static RaidEvent get(int id) {
         return raids.get(id);
+    }
+
+    public static EventRaidAction launchProbeRaid(Team attacker, Team threatTeam, float sourceX, float sourceY, Building target, int seed) {
+        if (!RaidLogic.isLogicSide() || attacker == null || threatTeam == null
+                || target == null || !target.isValid() || target.team == attacker) return null;
+
+        if (tierPools == null || tierPools.length == 0) registerRaids();
+        int tier = getRaidTier(threatTeam);
+        RaidEvent raid = pickRaid(tier, seed);
+        if (raid == null) return null;
+
+        EventRaidAction action = createAction(raid, attacker,
+                sourceX / tilesize, sourceY / tilesize,
+                target.x / tilesize, target.y / tilesize, seed);
+        action.gatedByRaidState = false;
+        action.raidScale = raid.raidScale;
+        action.postInit();
+
+        ActionBus bus = new ActionBus();
+        bus.add(action);
+        cutscene.addSubActionBus(bus);
+        return action;
     }
 
     public static IntMap<RaidEvent> all() {
@@ -190,14 +218,15 @@ public class DefaultRaid {
     }
 
     private static void scheduleNextRaid(float delaySeconds) {
-        nextRaidAt = Time.millis() + (long) (delaySeconds * 1000f);
+        // Schedule against game time so both manual and background pauses freeze the cooldown.
+        nextRaidAt = (long) (state.tick + delaySeconds * Time.toSeconds);
     }
 
     public static void update() {
         if (!RaidState.enabled()) return;
         if (!RaidLogic.isLogicSide()) return;
         if (!state.isPlaying()) return;
-        if (state.rules.mode() == Gamemode.sandbox || state.rules.mode() == Gamemode.pvp) return;
+        if (state.rules.editor || state.rules.mode() == Gamemode.sandbox || state.rules.mode() == Gamemode.pvp) return;
 
         if (overrideCheck.get(0, OVERRIDE_CHECK_INTERVAL)) {
             NHLogic.refreshCustomRaidLogic();
@@ -217,7 +246,7 @@ public class DefaultRaid {
             return;
         }
 
-        if (Time.millis() < nextRaidAt) return;
+        if (state.tick < nextRaidAt) return;
 
         dispatchRaid(wave, player);
     }
@@ -253,6 +282,10 @@ public class DefaultRaid {
     }
 
     private static EventRaidAction createAction(RaidEvent raid, Team wave, float sourceX, float sourceY, float targetX, float targetY) {
+        return createAction(raid, wave, sourceX, sourceY, targetX, targetY, raidSeed());
+    }
+
+    private static EventRaidAction createAction(RaidEvent raid, Team wave, float sourceX, float sourceY, float targetX, float targetY, int seed) {
         EventRaidAction action = new EventRaidAction();
         action.raidType = RaidPreset.CUSTOM_RAID;
         action.customBullet = raid.bullet;
@@ -263,7 +296,7 @@ public class DefaultRaid {
         action.raidScale = raid.raidScale;
         action.inaccuracy = raid.inaccuracy;
         action.overrideDefaultCoordinate = true;
-        action.syncSeed = raidSeed();
+        action.syncSeed = seed;
         action.sourceX = sourceX * tilesize;
         action.sourceY = sourceY * tilesize;
         action.targetX = targetX * tilesize;

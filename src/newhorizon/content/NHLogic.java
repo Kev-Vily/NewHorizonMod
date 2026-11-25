@@ -23,9 +23,22 @@ import newhorizon.expand.logic.components.CutsceneControl;
 import newhorizon.expand.logic.components.action.*;
 import newhorizon.expand.logic.cutscene.action.*;
 import newhorizon.expand.logic.cutscene.actionBus.*;
+import newhorizon.expand.logic.cutscene.letterbox.FreeZoom;
+import newhorizon.expand.logic.cutscene.letterbox.LetterboxIn;
+import newhorizon.expand.logic.cutscene.letterbox.LetterboxOut;
+import newhorizon.expand.logic.cutscene.letterbox.LetterboxText;
+import newhorizon.expand.logic.wproc.CaptureSector;
+import newhorizon.expand.logic.wproc.CustomProgressBar;
+import newhorizon.expand.logic.wproc.EventBanner;
+import newhorizon.expand.logic.wproc.DefaultWeatherEvent;
+import newhorizon.expand.logic.wproc.HUDsetting;
 import newhorizon.expand.logic.wip.NearestSpawn;
 import newhorizon.expand.logic.wip.RandomTarget;
+import newhorizon.expand.game.DefaultIntervention;
 import newhorizon.expand.game.DefaultRaid;
+import newhorizon.expand.game.DefaultSpecialEvent;
+import newhorizon.expand.game.WeatherEventState;
+import newhorizon.expand.logic.wproc.WeatherEvent;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -41,6 +54,7 @@ public class NHLogic {
     public static LCategory actionCameraControl, actionInputControl, actionCurtainControl, actionFlowControl;
 
     private static boolean customRaidLogic;
+    private static boolean customInterventionLogic;
 
     public static void load() {
         loadLCategory();
@@ -49,6 +63,9 @@ public class NHLogic {
         loadActions();
 
         DefaultRaid.load();
+        DefaultIntervention.load();
+        DefaultSpecialEvent.load();
+        WeatherEventState.load();
     }
 
     public static void loadLCategory() {
@@ -73,9 +90,19 @@ public class NHLogic {
     }
 
     public static void loadWprocStatements() {
+        registerPrivilegedStatement(EventBanner.class, "eventbanner");
+        registerPrivilegedStatement(CustomProgressBar.class, "customprogress");
+        registerPrivilegedStatement(HUDsetting.class, "hudsetting");
         registerPrivilegedStatement(newhorizon.expand.logic.wproc.DefaultRaid.class, "defaultraid");
+        registerPrivilegedStatement(newhorizon.expand.logic.wproc.DefaultIntervention.class, "defaultintervention");
+        registerPrivilegedStatement(newhorizon.expand.logic.wproc.DefaultSpecialEvent.class, "defaultspecialevent");
+        registerPrivilegedStatement(DefaultWeatherEvent.class, "defeatweatherevent");
+        registerPrivilegedStatement(WeatherEvent.class, "weatherevent");
         registerPrivilegedStatement(RandomTarget.class, "randtarget");
         registerPrivilegedStatement(NearestSpawn.class, "nearspawn");
+        registerPrivilegedStatement(CaptureSector.class, "capturesector");
+
+        registerPrivilegedStatement(FreeZoom.class, "freezoom");
     }
 
     public static void loadActions() {
@@ -86,6 +113,10 @@ public class NHLogic {
         registerAction(CurtainFadeIn.class, CurtainFadeInAction.class);
         registerAction(CurtainFadeOut.class, CurtainFadeOutAction.class);
 
+        registerAction(LetterboxIn.class, LetterboxInAction.class);
+        registerAction(LetterboxOut.class, LetterboxOutAction.class);
+        registerAction(LetterboxText.class, LetterboxTextAction.class);
+
         registerAction(CameraControl.class, CameraControlAction.class);
         registerAction(CameraZoom.class, CameraZoomAction.class);
         registerAction(CameraReset.class, CameraResetAction.class);
@@ -94,6 +125,10 @@ public class NHLogic {
         registerAction(InputUnlock.class, InputUnlockAction.class);
 
         registerAction(EventRaid.class, EventRaidAction.class);
+        registerAction(EventIntervention.class, EventInterventionAction.class);
+        registerAction(EventSpecial.class, EventSpecialAction.class);
+        CutsceneControl.registerAction(MarkWorldAction.class);
+        registerStatement(EventSpecialUnit.class);
 
         //registerAction(WarningIcon.class, WarningIconAction.class);
     }
@@ -231,6 +266,14 @@ public class NHLogic {
         customRaidLogic = scanCustomRaidLogic();
     }
 
+    public static boolean hasCustomInterventionLogic() {
+        return customInterventionLogic;
+    }
+
+    public static void refreshCustomInterventionLogic() {
+        customInterventionLogic = scanCustomInterventionLogic();
+    }
+
     private static boolean scanCustomRaidLogic() {
         boolean[] found = {false};
 
@@ -260,9 +303,49 @@ public class NHLogic {
         return found[0];
     }
 
+    private static boolean scanCustomInterventionLogic() {
+        boolean[] found = {false};
+
+        world.tiles.eachTile(t -> {
+            if (found[0]) return;
+            if (!t.isCenter() || t.block() != Blocks.worldProcessor) return;
+            if (!(t.build instanceof LogicBlock.LogicBuild proc)) return;
+
+            String tag = proc.tag;
+            if (tag != null) {
+                String lower = tag.toLowerCase();
+                if (lower.contains("intervention") || lower.contains("fleet") || lower.contains("specialevent") || lower.contains("specialunit")) {
+                    found[0] = true;
+                    return;
+                }
+            }
+
+            String code = proc.code;
+            if (code != null && !code.isEmpty() && codeContainsIntervention(code)) found[0] = true;
+        });
+
+        if (!found[0]) {
+            state.rules.tags.each((key, value) -> {
+                if (found[0]) return;
+                if (!key.startsWith(CutsceneControl.CSS_ACTION)) return;
+                if (value != null && (value.contains("interventionevent") || value.contains("specialevent") || value.contains("specialunit") || value.contains("event-special"))) found[0] = true;
+            });
+        }
+
+        return found[0];
+    }
+
     private static boolean codeContainsRaid(String code) {
         if (code.contains("defaultraid") || code.contains("raidevent") || code.contains("raidcontrol")) return true;
         return code.contains("randtarget") && code.contains("nearspawn");
+    }
+
+    private static boolean codeContainsIntervention(String code) {
+        return code.contains("defaultintervention")
+                || code.contains("interventionevent")
+                || code.contains("defaultspecialevent")
+                || code.contains("specialevent")
+                || code.contains("specialunit");
     }
 
     public static void registerReuseTimer(float time, String eventTrigger, String eventExecutor) {

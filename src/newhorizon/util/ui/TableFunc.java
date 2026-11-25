@@ -24,6 +24,7 @@ import arc.scene.event.InputListener;
 import arc.scene.event.Touchable;
 import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
+import arc.scene.ui.layout.Scl;
 import arc.scene.ui.layout.Table;
 import arc.util.Align;
 import arc.util.Log;
@@ -78,6 +79,67 @@ public class TableFunc {
     private static UnitType selected = UnitTypes.alpha;
     private static long lastToast;
     private static Table pTable = new Table(), floatTable = new Table();
+
+    public static float softUiScale() {
+        float s = Scl.scl(1f);
+        if (s <= 1f) return Mathf.clamp(s, 0.75f, 1f);
+        return Mathf.clamp(1f + (s - 1f) * 0.32f, 1f, 1.28f);
+    }
+
+    public static float ui(float value) {
+        return value * softUiScale();
+    }
+
+    /**
+     * A dialog content size that remains inside the usable viewport at every UI scale.
+     * <p>
+     * Scene coordinates are physical pixels, while the contents of a dialog (fonts, paddings
+     * and controls) are enlarged by {@link Scl}.  Sizing a dialog straight from
+     * {@link Core#graphics} therefore works at the default scale but allows the enlarged
+     * contents to leave the screen at higher scales.  Fit the design canvas into the viewport
+     * after converting it to UI units, keeping its aspect ratio intact.
+     */
+    public static DialogSize dialogSize(float designWidth, float designHeight, float widthFraction, float heightFraction) {
+        float uiScale = Math.max(Scl.scl(), 0.01f);
+        float viewportWidth = Core.graphics.getWidth() / uiScale;
+        float viewportHeight = Core.graphics.getHeight() / uiScale;
+        float maxWidth = viewportWidth * Mathf.clamp(widthFraction, 0.5f, 0.95f);
+        float maxHeight = viewportHeight * Mathf.clamp(heightFraction, 0.5f, 0.95f);
+        float fit = Math.min(1f, Math.min(maxWidth / designWidth, maxHeight / designHeight));
+        return new DialogSize(designWidth * fit, designHeight * fit);
+    }
+
+    public static class DialogSize {
+        private final float width;
+        private final float height;
+
+        public DialogSize(float width, float height) {
+            this.width = width;
+            this.height = height;
+        }
+
+        public float width() {
+            return width;
+        }
+
+        public float height() {
+            return height;
+        }
+    }
+
+    public static boolean isPortraitLayout() {
+        return Core.graphics.getHeight() > Core.graphics.getWidth();
+    }
+
+    public static float dialogWidth(float design, float screenFrac) {
+        float max = Core.graphics.getWidth() / Math.max(Scl.scl(), 0.01f) * Mathf.clamp(screenFrac, 0.5f, 0.95f);
+        return Math.min(design, max);
+    }
+
+    public static float dialogHeight(float design, float screenFrac) {
+        float max = Core.graphics.getHeight() / Math.max(Scl.scl(), 0.01f) * Mathf.clamp(screenFrac, 0.5f, 0.95f);
+        return Math.min(design, max);
+    }
 
     public static String format(float value) {
         return df.format(value);
@@ -406,9 +468,6 @@ public class TableFunc {
                     }).growX().height(LEN).row();
                     tin.pane(con -> {
                         con.button("Remove Units", Styles.cleart, Groups.unit::clear).grow();
-                        con.button("Remove Fires", Styles.cleart, () -> {
-                            for (int i = 0; i < 20; i++) Time.run(i * Time.delta * 3, Groups.fire::clear);
-                        }).grow();
                         con.button("Cathc Fires", Styles.cleart, () -> {
                             Geometry.circle(World.toTile(point.x), World.toTile(point.y), 10, ((x1, y1) -> {
                                 Tile tile = world.tile(x1, y1);

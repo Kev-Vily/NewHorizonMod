@@ -1,16 +1,27 @@
 package newhorizon.content;
 
+import arc.Core;
+import arc.Events;
 import arc.struct.ObjectMap;
 import arc.struct.ObjectSet;
 import arc.struct.Seq;
+import mindustry.Vars;
+import mindustry.content.Blocks;
 import mindustry.content.Items;
+import mindustry.content.SectorPresets;
 import mindustry.content.TechTree.TechNode;
 import mindustry.content.UnitTypes;
 import mindustry.ctype.UnlockableContent;
+import mindustry.game.EventType;
+import mindustry.game.Objectives.Objective;
+import mindustry.game.Objectives.Research;
+import mindustry.game.Objectives.SectorComplete;
 import mindustry.type.ItemStack;
+import mindustry.type.SectorPreset;
 import mindustry.type.StatusEffect;
 import mindustry.type.UnitType;
 import mindustry.world.Block;
+import newhorizon.NewHorizon;
 import newhorizon.content.blocks.*;
 import newhorizon.content.units.AirUnitTypes;
 import newhorizon.content.units.GroundUnitTypes;
@@ -22,11 +33,16 @@ public class NHTechTree {
     public static final ObjectMap<UnitType, ItemStack[]> unitBuildCost = new ObjectMap<>();
     private static final ObjectSet<UnlockableContent> addedProductionContents = new ObjectSet<>();
     private static final int defaultResearchCostMultiplier = 5;
+    private static final String progressionResetKey = "new-horizon-primary-base-tech-reset";
 
     public static Seq<ProductionNode> itemProductionTree = new Seq<>();
     public static Seq<ProductionNode> liquidProductionTree = new Seq<>();
+    public static Seq<ProductionNode> particleStreamProductionTree = new Seq<>();
     public static Seq<ProductionNode> blockTechTree = new Seq<>();
     public static TechNode root;
+    private static final ObjectMap<UnlockableContent, Boolean> temporaryAlwaysUnlocked = new ObjectMap<>();
+    private static boolean progressionEventsRegistered;
+    private static boolean temporaryModTechActive;
 
     public static void load() {
         unitBuildCost.each((u, is) -> {
@@ -37,6 +53,7 @@ public class NHTechTree {
 
         itemProductionTree = buildItemProductionTree();
         liquidProductionTree = buildLiquidProductionTree();
+        particleStreamProductionTree = buildParticleStreamProductionTree();
         blockTechTree = buildBlockTechTree();
         addedProductionContents.clear();
 
@@ -51,10 +68,319 @@ public class NHTechTree {
                 addProductionNode(node);
             }
 
+            for (ProductionNode node : particleStreamProductionTree) {
+                addProductionNode(node);
+            }
+
             for (ProductionNode node : blockTechTree) {
                 addBlockTechNode(node);
             }
         });
+
+        applyMapResearchRequirements();
+
+        addSerpuloTechTree();
+        addErekirTechTree();
+        registerProgressionEvents();
+    }
+
+    private static void addSerpuloTechTree() {
+        addTechNode(SectorPresets.nuclearComplex, NHSectorPresents.frozenPeaks);
+        addTechNode(Blocks.combustionGenerator, PowerBlock.photothermalGenerator);
+        addTechNode(Blocks.thermalGenerator, PowerBlock.geologicalPhotothermalGenerator);
+        addTechNode(Blocks.separator, ProductionBlock.tungstenReconstructor);
+        addTechNode(Blocks.siliconSmelter, CraftingBlock.recrystallizer);
+        addTechNode(Blocks.sporePress, CraftingBlock.chemicalDissociationChamber);
+    }
+
+    private static void addErekirTechTree() {
+        addTechNode(Blocks.turbineCondenser, PowerBlock.vectorCondenser);
+        addTechNode(Blocks.siliconArcFurnace, ProductionBlock.titaniumReconstructor);
+        addTechNode(Blocks.siliconArcFurnace, CraftingBlock.recrystallizer);
+        addTechNode(Blocks.pyrolysisGenerator, PowerBlock.differentialReactor);
+        addTechNode(Blocks.oxidationChamber, ProductionBlock.compoundHydrator);
+    }
+
+    private static void addTechNode(UnlockableContent parentContent, UnlockableContent childContent) {
+        TechNode parent = all.find(node -> node.content == parentContent);
+        if (parent == null || parent.children.contains(node -> node.content == childContent)) return;
+
+        new TechNode(parent, childContent, childContent.researchRequirements());
+    }
+
+    private static void applyMapResearchRequirements() {
+        bindMap(NHSectorPresents.landingPoint,
+                CraftingBlock.stampingFacility,
+                CraftingBlock.processorManuFactory,
+                CraftingBlock.recrystallizer,
+                TurretBlock.thermo,
+                TurretBlock.beam,
+                CraftingBlock.particleActivator,
+                PowerBlock.neutralizationGenerator,
+                SpecialBlock.standardStorage,
+                DefenseBlock.standardRegenProjector,
+                PowerBlock.armorBattery,
+                DistributionBlock.omniUnloader,
+                DefenseBlock.presstaniumWall,
+                LogicBlock.characterDisplaySmall,
+                LogicBlock.characterDisplay,
+                LogicBlock.iconDisplaySmall,
+                LogicBlock.iconDisplay,
+                LiquidBlock.standardLiquidStorage
+        );
+        addResearch(LogicBlock.characterDisplay, LogicBlock.characterDisplaySmall);
+        addResearch(LogicBlock.iconDisplay, LogicBlock.iconDisplaySmall);
+
+        bindMap(NHSectorPresents.relicAccess,
+                ProductionBlock.resonanceMiningFacility,
+                ProductionBlock.airRadiator,
+                CraftingBlock.crystallizer,
+                CraftingBlock.rectificatior,
+                CraftingBlock.subCooler,
+                TurretBlock.synchro,
+                TurretBlock.argmot,
+                NHBlocks.gravity,
+                GroundUnitTypes.thynomo,
+                PowerBlock.fluxNodeLargeMK1,
+                LiquidBlock.turboPump,
+                PowerBlock.gravityTrapSmall,
+                NHBlocks.fireExtinguisher,
+                LiquidBlock.streamExtractor,
+                LiquidBlock.streamReceiver,
+                LiquidBlock.streamRepeater,
+                LiquidBlock.streamRedirector,
+                LiquidBlock.streamSplitter
+        );
+        addResearch(CraftingBlock.crystallizer, NHLiquids.ammonia);
+
+        bindMap(NHSectorPresents.streamStation,
+                NHUnitTypes.relay,
+                ProductionBlock.decoherenceReverser
+        );
+        addResearch(NHUnitTypes.relay, UnitBlock.jumpGateBasic);
+
+        bindMap(NHSectorPresents.edgeZone,
+                CraftingBlock.plasticator,
+                CraftingBlock.photocatalystFactory,
+                PowerBlock.hydrazineGenerator,
+                PowerBlock.xenExtractor,
+                CraftingBlock.xenSeparator,
+                NHBlocks.multipleLauncher,
+                DistributionBlock.lightStackLoader,
+                DistributionBlock.stackRail,
+                UnitBlock.jumpGatePrimary,
+                NHUnitTypes.aliotiat
+        );
+        addResearch(PowerBlock.hydrazineGenerator, NHLiquids.hydrazine);
+        addResearch(PowerBlock.hydrazineGenerator, CraftingBlock.photocatalystFactory);
+        addResearch(NHUnitTypes.aliotiat, UnitBlock.jumpGatePrimary);
+
+        bindMap(NHSectorPresents.crossBranch,
+                CraftingBlock.crucibleFoundry,
+                CraftingBlock.multipleRollingMill,
+                SpecialBlock.heavyStorage,
+                LiquidBlock.heavyLiquidStorage,
+                NHBlocks.largeWaterExtractor,
+                NHUnitTypes.warper
+        );
+        addResearch(NHUnitTypes.warper, NHUnitTypes.branch);
+        addResearch(NHUnitTypes.warper, UnitBlock.jumpGatePrimary);
+
+        bindMap(NHSectorPresents.interferedArray,
+                NHBlocks.interferon,
+                NHUnitTypes.histone
+        );
+        addResearch(NHUnitTypes.histone, UnitBlock.jumpGateBasic);
+
+        bindMap(NHSectorPresents.hollow,
+                CraftingBlock.heavyStampingFacility,
+                CraftingBlock.processorPrinter,
+                CraftingBlock.hyperCooler,
+                ProductionBlock.liquidRadiator,
+                DefenseBlock.standardForceProjector,
+                DefenseBlock.refactoringMultiWall,
+                SpecialBlock.coreArray,
+                CraftingBlock.eutecticPurifierGraphite,
+                CraftingBlock.eutecticPurifierSilicon
+        );
+        addResearch(CraftingBlock.heavyStampingFacility, NHLiquids.neutron);
+        addResearch(CraftingBlock.processorPrinter, NHLiquids.quantumLiquid);
+        addResearch(CraftingBlock.hyperCooler, NHLiquids.hydrazine);
+        addResearch(CraftingBlock.hyperCooler, NHLiquids.xenFluid);
+    }
+
+    private static void bindMap(SectorPreset sector, UnlockableContent... contents) {
+        if (sector == null) return;
+        for (UnlockableContent content : contents) addObjective(content, new SectorComplete(sector));
+    }
+
+    private static void addResearch(UnlockableContent content, UnlockableContent prerequisite) {
+        if (content == null || prerequisite == null) return;
+        addObjective(content, new Research(prerequisite));
+    }
+
+    private static void addObjective(UnlockableContent content, Objective objective) {
+        if (content == null || objective == null) return;
+        TechNode node = all.find(candidate -> candidate.content == content && candidate.rootNode == root);
+        if (node == null || node.objectives.contains(existing -> sameObjective(existing, objective))) return;
+        node.objectives.add(objective);
+    }
+
+    private static boolean sameObjective(Objective first, Objective second) {
+        if (first instanceof SectorComplete left && second instanceof SectorComplete right) {
+            return left.preset == right.preset;
+        }
+        if (first instanceof Research left && second instanceof Research right) {
+            return left.content == right.content;
+        }
+        return false;
+    }
+
+    private static void registerProgressionEvents() {
+        if (progressionEventsRegistered) return;
+        progressionEventsRegistered = true;
+
+        Events.on(EventType.ContentInitEvent.class, event -> syncProgressionState());
+        Events.on(EventType.WorldLoadBeginEvent.class, event -> clearTemporaryModTech());
+        Events.on(EventType.WorldLoadEvent.class, event -> syncTemporaryModTech());
+        Events.on(EventType.ResetEvent.class, event -> clearTemporaryModTech());
+        Events.on(EventType.GameOverEvent.class, event -> clearTemporaryModTech());
+        Events.on(EventType.SectorLoseEvent.class, event -> {
+            if (NHSectorPresents.primaryBase != null
+                    && event.sector == NHSectorPresents.primaryBase.sector) {
+                clearTemporaryModTech();
+            }
+        });
+        Events.run(EventType.Trigger.update, NHTechTree::checkCampaignReset);
+        Events.on(EventType.SectorCaptureEvent.class, event -> {
+            if (event.initialCapture && NHSectorPresents.primaryBase != null
+                    && event.sector == NHSectorPresents.primaryBase.sector) {
+                clearTemporaryModTech();
+                resetModTechProgress();
+                NHSectorPresents.launchLandingPointFromPrimaryBase();
+            }
+        });
+    }
+
+    private static void syncProgressionState() {
+        if (NHSectorPresents.primaryBase == null || NHSectorPresents.primaryBase.sector == null) return;
+
+        NHSectorPresents.primaryBase.sector.loadInfo();
+        if (NHSectorPresents.primaryBase.sector.info.wasCaptured) {
+            if (Core.settings.getBool(progressionResetKey, false)) {
+                enableModTechProgression();
+            } else {
+                resetModTechProgress();
+            }
+            NHSectorPresents.lockPrimaryBase();
+        } else {
+            NHSectorPresents.unlockPrimaryBase();
+        }
+    }
+
+    private static void checkCampaignReset() {
+        if (NHSectorPresents.primaryBase == null || NHSectorPresents.primaryBase.sector == null) return;
+
+        // WorldLoadEvent is not guaranteed to run after the campaign sector has
+        // been assigned. Re-check the actual running sector every tick so entering
+        // Primary Base always activates the temporary NH unlock state.
+        syncTemporaryModTech();
+
+        if (!NHSectorPresents.primaryBase.sector.info.wasCaptured
+                && Core.settings.getBool(progressionResetKey, false)) {
+            // A cleared campaign only needs its entry sector restored. Full NH access is
+            // granted temporarily when that sector is actually being played.
+            NHSectorPresents.unlockPrimaryBase();
+            Core.settings.put(progressionResetKey, false);
+        }
+    }
+
+    private static void syncTemporaryModTech() {
+        if (Vars.state == null || !Vars.state.isGame() || !Vars.state.isCampaign()
+                || NHSectorPresents.primaryBase == null || NHSectorPresents.primaryBase.sector == null
+                || Vars.state.rules.sector != NHSectorPresents.primaryBase.sector
+                || NHSectorPresents.primaryBase.sector.info.wasCaptured) {
+            clearTemporaryModTech();
+            return;
+        }
+
+        enableTemporaryModTech();
+    }
+
+    private static void enableTemporaryModTech() {
+        if (temporaryModTechActive) return;
+
+        temporaryAlwaysUnlocked.clear();
+        Vars.content.each(content -> {
+            if (!(content instanceof UnlockableContent unlockable)
+                    || content.minfo.mod != NewHorizon.MOD
+                    || content instanceof SectorPreset) return;
+
+            temporaryAlwaysUnlocked.put(unlockable, unlockable.alwaysUnlocked);
+            unlockable.alwaysUnlocked = true;
+        });
+        temporaryModTechActive = true;
+    }
+
+    private static void clearTemporaryModTech() {
+        if (!temporaryModTechActive) return;
+
+        temporaryAlwaysUnlocked.each((content, value) -> content.alwaysUnlocked = value);
+        temporaryAlwaysUnlocked.clear();
+        temporaryModTechActive = false;
+    }
+
+    private static void enableModTechProgression() {
+        root.each(node -> {
+            if (isResettableModTechNode(node)) {
+                node.content.alwaysUnlocked = false;
+            }
+        });
+        unlockLandingPoint();
+    }
+
+    private static void resetModTechProgress() {
+        root.each(node -> {
+            if (!isResettableModTechNode(node)) return;
+
+            node.content.alwaysUnlocked = false;
+            node.content.clearUnlock();
+            node.reset();
+
+            if (Vars.state != null && Vars.state.rules != null) {
+                Vars.state.rules.researched.remove(node.content);
+            }
+        });
+        clearPrimaryBaseCoreResources();
+        unlockLandingPoint();
+        Core.settings.put(progressionResetKey, true);
+        Core.settings.manualSave();
+    }
+
+    private static void unlockLandingPoint() {
+        if (NHSectorPresents.landingPoint != null) {
+            NHSectorPresents.landingPoint.quietUnlock();
+        }
+    }
+
+    private static void clearPrimaryBaseCoreResources() {
+        if (NHSectorPresents.primaryBase == null || NHSectorPresents.primaryBase.sector == null) return;
+
+        var sector = NHSectorPresents.primaryBase.sector;
+        if (Vars.state != null && Vars.state.rules != null && Vars.state.rules.sector == sector) {
+            Vars.state.rules.defaultTeam.cores().each(core -> core.items.clear());
+        }
+
+        sector.info.items.clear();
+        sector.saveInfo();
+    }
+
+    private static boolean isModTechNode(TechNode node) {
+        return node != root && node.content != null && node.content.minfo.mod == NewHorizon.MOD;
+    }
+
+    private static boolean isResettableModTechNode(TechNode node) {
+        return isModTechNode(node) && node.content != SpecialBlock.coreConflux;
     }
 
     private static void addProductionNode(ProductionNode productionNode) {
@@ -74,7 +400,7 @@ public class NHTechTree {
 
         addedProductionContents.add(techNode.content);
 
-        node(techNode.content, getResearchRequirements(techNode), () -> {
+        node(techNode.content, getResearchRequirements(techNode), techNode.objectives, () -> {
             for (ProductionNode child : techNode.children) {
                 addBlockTechNode(child);
             }
@@ -108,31 +434,53 @@ public class NHTechTree {
         public final UnlockableContent content;
         public final Seq<ProductionNode> children;
         public final ItemStack[] requirements;
+        public final Seq<Objective> objectives;
 
-        private ProductionNode(UnlockableContent content, ItemStack[] requirements, ProductionNode... children) {
+        private ProductionNode(UnlockableContent content, ItemStack[] requirements, Seq<Objective> objectives, ProductionNode... children) {
             this.content = content;
             this.requirements = requirements;
+            this.objectives = objectives;
             this.children = Seq.with(children);
         }
 
         public static ProductionNode node(UnlockableContent content, ProductionNode... children) {
-            return new ProductionNode(content, null, children);
+            return new ProductionNode(content, null, new Seq<>(), children);
         }
 
         public static ProductionNode node(UnlockableContent content, ItemStack[] requirements, ProductionNode... children) {
-            return new ProductionNode(content, requirements, children);
+            return new ProductionNode(content, requirements, new Seq<>(), children);
+        }
+
+        public static ProductionNode node(UnlockableContent content, Seq<Objective> objectives, ProductionNode... children) {
+            return new ProductionNode(content, null, objectives, children);
         }
     }
 
     private static Seq<ProductionNode> buildBlockTechTree() {
         return Seq.with(
                 ProductionNode.node(SpecialBlock.coreConflux,
+                        ProductionNode.node(NHSectorPresents.landingPoint, Seq.with(new SectorComplete(NHSectorPresents.primaryBase)),
+                                ProductionNode.node(NHSectorPresents.relicAccess,
+                                        ProductionNode.node(NHSectorPresents.edgeZone,
+                                                Seq.with(new SectorComplete(NHSectorPresents.relicAccess)),
+                                                ProductionNode.node(NHSectorPresents.crossBranch,
+                                                        Seq.with(new SectorComplete(NHSectorPresents.edgeZone)),
+                                                        ProductionNode.node(NHSectorPresents.interferedArray,
+                                                                Seq.with(new SectorComplete(NHSectorPresents.crossBranch))),
+                                                        ProductionNode.node(NHSectorPresents.hollow,
+                                                                Seq.with(new SectorComplete(NHSectorPresents.crossBranch)))
+                                                )
+                                        ),
+                                        ProductionNode.node(NHSectorPresents.streamStation,
+                                                Seq.with(new SectorComplete(NHSectorPresents.relicAccess)))
+                                )
+                        ),
                         ProductionNode.node(SpecialBlock.coreArray,
                                 ProductionNode.node(SpecialBlock.coreNexus,
                                         ProductionNode.node(SpecialBlock.coreCluster)
                                 )
                         ),
-                        ProductionNode.node(PowerBlock.photonPanel,
+                        ProductionNode.node(PowerBlock.photonPanel, ItemStack.with(NHItems.silicar, 30),
                                 ProductionNode.node(PowerBlock.fluxNodeMK1,
                                         ProductionNode.node(PowerBlock.fluxNodeMK2),
                                         ProductionNode.node(PowerBlock.fluxNodeLargeMK1,
@@ -157,23 +505,26 @@ public class NHTechTree {
                                         )
                                 )
                         ),
-                        ProductionNode.node(ProductionBlock.scanCollector,
+                        ProductionNode.node(ProductionBlock.interlockingDrill, ItemStack.with(NHItems.silicar, 30),
                                 ProductionNode.node(ProductionBlock.sandCracker),
                                 ProductionNode.node(NHBlocks.largeWaterExtractor),
-                                ProductionNode.node(ProductionBlock.tungstenReconstructor,
-                                        ProductionNode.node(ProductionBlock.titaniumReconstructor)
-                                ),
                                 ProductionNode.node(ProductionBlock.decoherenceReverser),
-                                ProductionNode.node(ProductionBlock.resonanceMiningFacility,
-                                        ProductionNode.node(ProductionBlock.airRadiator),
-                                        ProductionNode.node(ProductionBlock.beamMiningFacility,
-                                                ProductionNode.node(ProductionBlock.liquidRadiator)
-                                        )
+                                ProductionNode.node(ProductionBlock.scanCollector,
+                                        ProductionNode.node(ProductionBlock.advancedScanCollector),
+                                        ProductionNode.node(ProductionBlock.resonanceMiningFacility,
+                                                ProductionNode.node(ProductionBlock.beamMiningFacility,
+                                                    ProductionNode.node(ProductionBlock.implosionMiningFacility),
+                                                    ProductionNode.node(ProductionBlock.liquidRadiator)
+                                                )
+                                        ),
+                                        ProductionNode.node(ProductionBlock.airRadiator)
                                 ),
-                                ProductionNode.node(ProductionBlock.resourceConvertor),
+                                ProductionNode.node(CraftingBlock.recrystallizer),
                                 ProductionNode.node(ProductionBlock.oilRefiner)
                         ),
-                        ProductionNode.node(CraftingBlock.silicarCrusher,
+                        ProductionNode.node(CraftingBlock.silicarCrusher, ItemStack.with(NHItems.silicar, 30),
+                                ProductionNode.node(CraftingBlock.eutecticPurifierGraphite),
+                                ProductionNode.node(CraftingBlock.eutecticPurifierSilicon),
                                 ProductionNode.node(CraftingBlock.stampingFacility,
                                         ProductionNode.node(CraftingBlock.heavyStampingFacility),
                                         ProductionNode.node(CraftingBlock.multipleRollingMill,
@@ -181,6 +532,7 @@ public class NHTechTree {
                                                         ProductionNode.node(CraftingBlock.heavyRollingMill)
                                                 ),
                                                 ProductionNode.node(CraftingBlock.denseFactory,
+                                                        ProductionNode.node(CraftingBlock.tandemFactory),
                                                         ProductionNode.node(CraftingBlock.nodexFactory,
                                                                 ProductionNode.node(CraftingBlock.hadronCompositeBuilder),
                                                                 ProductionNode.node(CraftingBlock.darkEnergyTrap)
@@ -235,7 +587,8 @@ public class NHTechTree {
                                 ),
                                 ProductionNode.node(CraftingBlock.particleActivator,
                                         ProductionNode.node(CraftingBlock.plasmaActivator),
-                                        ProductionNode.node(CraftingBlock.xenSeparator)
+                                        ProductionNode.node(CraftingBlock.xenSeparator),
+                                        ProductionNode.node(PowerBlock.xenExtractor)
                                 ),
                                 ProductionNode.node(CraftingBlock.reverseCollapseFacility)
                         ),
@@ -283,79 +636,107 @@ public class NHTechTree {
                                         ProductionNode.node(DistributionBlock.liquidBridgeExtend)
                                 ),
                                 ProductionNode.node(DistributionBlock.liquidUnloader),
+                                ProductionNode.node(LiquidBlock.streamExtractor,
+                                        ProductionNode.node(LiquidBlock.streamReceiver),
+                                        ProductionNode.node(LiquidBlock.streamRepeater,
+                                                ProductionNode.node(LiquidBlock.streamRedirector),
+                                                ProductionNode.node(LiquidBlock.streamSplitter)
+                                        )
+                                ),
                                 ProductionNode.node(LiquidBlock.turboPumpSmall,
                                         ProductionNode.node(LiquidBlock.turboPump)
                                 ),
-                                ProductionNode.node(LiquidBlock.standardLiquidStorage,
+                        ProductionNode.node(LiquidBlock.standardLiquidStorage,
                                         ProductionNode.node(LiquidBlock.heavyLiquidStorage)
+                                )
+                        ),
+                        ProductionNode.node(DefenseBlock.insulatedWall,
+                                ProductionNode.node(DefenseBlock.heavyDefenceWall,
+                                        ProductionNode.node(DefenseBlock.heavyDefenceWallLarge),
+                                        ProductionNode.node(DefenseBlock.heavyDefenceDoor,
+                                                ProductionNode.node(DefenseBlock.heavyDefenceDoorLarge)
+                                        ),
+                                        ProductionNode.node(DefenseBlock.setonWall,
+                                                ProductionNode.node(DefenseBlock.setonWallLarge,
+                                                        ProductionNode.node(DefenseBlock.chargeWall,
+                                                                ProductionNode.node(DefenseBlock.chargeWallLarge)
+                                                        )
+                                                )
+                                        )
+                                ),
+                                ProductionNode.node(NHBlocks.fireExtinguisher,
+                                        ProductionNode.node(NHBlocks.blaster)
                                 )
                         ),
                         ProductionNode.node(DefenseBlock.titaniumWall,
                                 ProductionNode.node(DefenseBlock.presstaniumWall,
                                         ProductionNode.node(DefenseBlock.refactoringMultiWall,
                                                 ProductionNode.node(DefenseBlock.setonPhasedWall,
-                                                        ProductionNode.node(DefenseBlock.shapedWall)
+                                                        ProductionNode.node(DefenseBlock.shapedWall,
+                                                                ProductionNode.node(NHBlocks.ancientLaserWall)
+                                                        )
                                                 )
                                         )
                                 ),
-                                ProductionNode.node(NHBlocks.fireExtinguisher),
                                 ProductionNode.node(DefenseBlock.standardRegenProjector,
                                         ProductionNode.node(DefenseBlock.heavyRegenProjector)
                                 ),
                                 ProductionNode.node(DefenseBlock.standardForceProjector,
                                         ProductionNode.node(DefenseBlock.largeShieldGenerator,
-                                                ProductionNode.node(DefenseBlock.riftShield)
+                                                ProductionNode.node(DefenseBlock.riftShield),
+                                                ProductionNode.node(DefenseBlock.plasmaMembrane)
                                         )
                                 )
                         ),
                         ProductionNode.node(TurretBlock.thermo,
-                                ProductionNode.node(TurretBlock.pulse,
-                                        ProductionNode.node(TurretBlock.beam,
-                                                ProductionNode.node(TurretBlock.electro)
-                                        )
-                                ),
-                                ProductionNode.node(TurretBlock.synchro,
+                                ProductionNode.node(TurretBlock.beam,
                                         ProductionNode.node(TurretBlock.argmot,
-                                                ProductionNode.node(TurretBlock.bombard)
+                                                ProductionNode.node(NHBlocks.gravity,
+                                                        ProductionNode.node(NHBlocks.antiBulletTurret,
+                                                                ProductionNode.node(NHBlocks.webber)
+                                                        )
+                                                ),
+                                                ProductionNode.node(TurretBlock.concentration,
+                                                        ProductionNode.node(NHBlocks.atomSeparator),
+                                                        ProductionNode.node(NHBlocks.prism)
+                                                ),
+                                                ProductionNode.node(NHBlocks.railGun,
+                                                        ProductionNode.node(TurretBlock.electro)
+                                                )
                                         )
                                 ),
-                                ProductionNode.node(TurretBlock.vortex,
-                                        ProductionNode.node(TurretBlock.concentration)
-                                ),
-                                ProductionNode.node(NHBlocks.multipleLauncher,
-                                        ProductionNode.node(NHBlocks.hive),
-                                        ProductionNode.node(NHBlocks.bombLauncher,
-                                                ProductionNode.node(NHBlocks.airRaider)
-                                        )
-                                ),
-                                ProductionNode.node(NHBlocks.gravity,
-                                        ProductionNode.node(NHBlocks.antiBulletTurret,
-                                                ProductionNode.node(NHBlocks.webber)
-                                        )
-                                ),
-                                ProductionNode.node(NHBlocks.blaster),
-                                ProductionNode.node(NHBlocks.antibody,
-                                        ProductionNode.node(NHBlocks.interferon,
-                                                ProductionNode.node(NHBlocks.prism),
-                                                ProductionNode.node(NHBlocks.executor,
-                                                        ProductionNode.node(NHBlocks.dendrite),
-                                                        ProductionNode.node(NHBlocks.endOfEra,
-                                                                ProductionNode.node(NHBlocks.eternity)
+                                ProductionNode.node(TurretBlock.pulse,
+                                        ProductionNode.node(TurretBlock.slavio,
+                                                ProductionNode.node(TurretBlock.vortex)
+                                        ),
+                                        ProductionNode.node(NHBlocks.multipleLauncher,
+                                                ProductionNode.node(TurretBlock.bombard),
+                                                ProductionNode.node(NHBlocks.hive),
+                                                ProductionNode.node(NHBlocks.bombLauncher,
+                                                        ProductionNode.node(NHBlocks.airRaider)
+                                                )
+                                        ),
+                                        ProductionNode.node(TurretBlock.synchro,
+                                                ProductionNode.node(NHBlocks.bloodStar,
+                                                        ProductionNode.node(NHBlocks.executor,
+                                                                ProductionNode.node(NHBlocks.endOfEra,
+                                                                        ProductionNode.node(NHBlocks.eternity)
+                                                                )
                                                         )
                                                 )
                                         )
                                 ),
-                                ProductionNode.node(NHBlocks.atomSeparator,
-                                        ProductionNode.node(NHBlocks.railGun)
-                                ),
-                                ProductionNode.node(TurretBlock.slavio,
-                                        //ProductionNode.node(TurretBlock.ancientArtillery),
-                                        ProductionNode.node(NHBlocks.bloodStar)
-                                )
+                                ProductionNode.node(NHBlocks.laserWall)
+                        ),
+                        ProductionNode.node(NHBlocks.interferon,
+                                ProductionNode.node(NHBlocks.antibody),
+                                ProductionNode.node(NHBlocks.dendrite)
                         ),
                         ProductionNode.node(SpecialBlock.standardStorage,
                                 ProductionNode.node(SpecialBlock.heavyStorage,
-                                        ProductionNode.node(SpecialBlock.remoteStorage)
+                                        ProductionNode.node(SpecialBlock.remoteStorage,
+                                                ProductionNode.node(SpecialBlock.accumulatingStorage)
+                                        )
                                 ),
                                 ProductionNode.node(SpecialBlock.juniorModuleBeacon,
                                         ProductionNode.node(SpecialBlock.seniorModuleBeacon)
@@ -368,50 +749,69 @@ public class NHTechTree {
                                 )
                         ),
                         ProductionNode.node(UnitBlock.jumpGateBasic,
-                                ProductionNode.node(GroundUnitTypes.origin),
-                                ProductionNode.node(GroundUnitTypes.thynomo),
-                                ProductionNode.node(NHUnitTypes.sharp),
-                                ProductionNode.node(NHUnitTypes.branch),
-                                ProductionNode.node(NHUnitTypes.relay),
-                                ProductionNode.node(NHUnitTypes.histone),
-
                                 ProductionNode.node(UnitBlock.jumpGatePrimary,
-                                        ProductionNode.node(NHUnitTypes.assaulter),
-                                        ProductionNode.node(AirUnitTypes.apparition),
-                                        ProductionNode.node(NHUnitTypes.ghost),
-                                        ProductionNode.node(NHUnitTypes.warper),
-                                        ProductionNode.node(NHUnitTypes.aliotiat),
-                                        ProductionNode.node(NHUnitTypes.rhino),
-                                        ProductionNode.node(NHUnitTypes.gather),
-                                        ProductionNode.node(NHUnitTypes.restrictionEnzyme),
-
                                         ProductionNode.node(UnitBlock.jumpGateStandard,
-                                                ProductionNode.node(NHUnitTypes.naxos),
-                                                ProductionNode.node(NHUnitTypes.striker),
-                                                ProductionNode.node(NHUnitTypes.tarlidor),
-                                                ProductionNode.node(NHUnitTypes.zarkov),
-                                                ProductionNode.node(NHUnitTypes.macrophage),
-                                                ProductionNode.node(NHUnitTypes.lymph),
-
-                                                ProductionNode.node(UnitBlock.jumpGateHyper,
-                                                        ProductionNode.node(NHUnitTypes.destruction),
-                                                        ProductionNode.node(NHUnitTypes.longinus),
-                                                        ProductionNode.node(GroundUnitTypes.annihilation),
-                                                        ProductionNode.node(NHUnitTypes.saviour),
-                                                        ProductionNode.node(NHUnitTypes.declining),
-                                                        ProductionNode.node(NHUnitTypes.hurricane),
-                                                        ProductionNode.node(NHUnitTypes.anvil),
-                                                        ProductionNode.node(NHUnitTypes.sin),
-                                                        ProductionNode.node(NHUnitTypes.collapser),
-                                                        ProductionNode.node(NHUnitTypes.laugra),
-                                                        ProductionNode.node(NHUnitTypes.guardian),
-                                                        ProductionNode.node(NHUnitTypes.pester)
-                                                        //ProductionNode.node(NHUnitTypes.nucleoid)
+                                                ProductionNode.node(UnitBlock.jumpGateHyper)
+                                        )
+                                )
+                        ),
+                        ProductionNode.node(GroundUnitTypes.origin,
+                                ProductionNode.node(GroundUnitTypes.thynomo,
+                                        ProductionNode.node(NHUnitTypes.aliotiat,
+                                                ProductionNode.node(NHUnitTypes.tarlidor,
+                                                        ProductionNode.node(GroundUnitTypes.annihilation,
+                                                                ProductionNode.node(NHUnitTypes.sin)
+                                                        )
                                                 )
                                         )
-                                ),
-                                ProductionNode.node(NHBlocks.hyperspaceWarper)
-                        )
+                                )
+                        ),
+                        ProductionNode.node(NHUnitTypes.sharp,
+                                ProductionNode.node(NHUnitTypes.branch,
+                                        ProductionNode.node(NHUnitTypes.warper,
+                                                ProductionNode.node(NHUnitTypes.striker,
+                                                        ProductionNode.node(NHUnitTypes.longinus,
+                                                                ProductionNode.node(NHUnitTypes.hurricane)
+                                                        )
+                                                ),
+                                                ProductionNode.node(NHUnitTypes.naxos,
+                                                        ProductionNode.node(NHUnitTypes.destruction)
+                                                )
+                                        )
+                                )
+                        ),
+                        ProductionNode.node(NHUnitTypes.relay,
+                                ProductionNode.node(NHUnitTypes.ghost,
+                                        ProductionNode.node(NHUnitTypes.zarkov,
+                                                ProductionNode.node(NHUnitTypes.declining)
+                                        )
+                                )
+                        ),
+                        ProductionNode.node(NHUnitTypes.histone,
+                                ProductionNode.node(NHUnitTypes.restrictionEnzyme,
+                                        ProductionNode.node(NHUnitTypes.lymph,
+                                                ProductionNode.node(NHUnitTypes.laugra)
+                                        ),
+                                        ProductionNode.node(NHUnitTypes.macrophage,
+                                                ProductionNode.node(NHUnitTypes.guardian),
+                                                ProductionNode.node(NHUnitTypes.pester)
+                                        )
+                                )
+                        ),
+                        ProductionNode.node(NHUnitTypes.assaulter,
+                                ProductionNode.node(AirUnitTypes.apparition,
+                                        ProductionNode.node(NHUnitTypes.anvil,
+                                                ProductionNode.node(NHUnitTypes.collapser)
+                                        )
+                                )
+                        ),
+                        ProductionNode.node(NHUnitTypes.rhino,
+                                ProductionNode.node(NHUnitTypes.gather,
+                                        ProductionNode.node(NHUnitTypes.saviour)
+                                )
+                        ),
+
+                        ProductionNode.node(NHBlocks.hyperspaceWarper)
                 )
         );
     }
@@ -452,13 +852,14 @@ public class NHTechTree {
                                 ProductionNode.node(Items.carbide),
                                 ProductionNode.node(Items.thorium,
                                         ProductionNode.node(Items.fissileMatter,
-                                                ProductionNode.node(NHItems.zeta,
-                                                        ProductionNode.node(NHItems.thermoCorePositive),
-                                                        ProductionNode.node(NHItems.thermoCoreNegative)
-                                                ),
-                                                ProductionNode.node(Items.phaseFabric)
+                                                ProductionNode.node(NHItems.thermoCoreNegative)
                                         ),
-                                        ProductionNode.node(NHItems.fusionEnergy)
+                                        ProductionNode.node(NHItems.fusionEnergy,
+                                                ProductionNode.node(NHItems.thermoCorePositive)
+                                        ),
+                                        ProductionNode.node(Items.phaseFabric,
+                                                ProductionNode.node(NHItems.zeta)
+                                        )
                                 )
                         )
                 )
@@ -478,10 +879,16 @@ public class NHTechTree {
                         ProductionNode.node(NHLiquids.quantumLiquid,
                                 ProductionNode.node(NHLiquids.antiMatter)
                         ),
-                        ProductionNode.node(NHLiquids.cryofluid),
-                        ProductionNode.node(NHLiquids.particle),
-                        ProductionNode.node(NHLiquids.zetaPositive,
-                                ProductionNode.node(NHLiquids.zetaNegative)
+                        ProductionNode.node(NHLiquids.cryofluid)
+                )
+        );
+    }
+
+    private static Seq<ProductionNode> buildParticleStreamProductionTree() {
+        return Seq.with(
+                ProductionNode.node(NHParticleStreams.particle,
+                        ProductionNode.node(NHParticleStreams.zetaPositive,
+                                ProductionNode.node(NHParticleStreams.zetaNegative)
                         )
                 )
         );

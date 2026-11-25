@@ -12,13 +12,14 @@ import newhorizon.content.units.CoreUnitTypes;
 import newhorizon.expand.block.special.AdaptOverdriveProjector;
 import newhorizon.expand.block.special.AssignedBeacon;
 import newhorizon.expand.block.special.RemoteCoreStorage;
+import newhorizon.expand.block.special.AccumulatingStorage;
 
 import static mindustry.type.ItemStack.with;
 
 public class SpecialBlock {
     public static Block
             coreConflux, coreArray, coreNexus, coreCluster,
-            standardStorage, heavyStorage, remoteStorage, nexusCore, juniorModuleBeacon, seniorModuleBeacon;
+            standardStorage, heavyStorage, accumulatingStorage, remoteStorage, nexusCore, juniorModuleBeacon, seniorModuleBeacon;
 
     public static void load() {
         coreConflux = new CoreBlock("core-conflux") {{
@@ -53,7 +54,6 @@ public class SpecialBlock {
                     NHItems.carbide, 1000
             ));
 
-            alwaysUnlocked = true;
 
             size = 4;
             armor = 15f;
@@ -79,7 +79,6 @@ public class SpecialBlock {
                     NHItems.surgeAlloy, 3000
             ));
 
-            alwaysUnlocked = true;
 
             size = 5;
             armor = 25f;
@@ -104,7 +103,6 @@ public class SpecialBlock {
                     NHItems.setonAlloy, 5000
             ));
 
-            alwaysUnlocked = true;
 
             size = 6;
             armor = 40f;
@@ -133,6 +131,13 @@ public class SpecialBlock {
             size = 3;
             health = 4000;
             itemCapacity = 4000;
+        }};
+
+        accumulatingStorage = new AccumulatingStorage("accumulating-storage") {{
+            requirements(Category.effect, with(NHItems.ancimembrane, 10, NHItems.seniorProcessor, 10));
+            size = 1;
+            health = 800;
+            armor = 10f;
         }};
 
         remoteStorage = new RemoteCoreStorage("remote-storage") {{
